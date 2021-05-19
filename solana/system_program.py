@@ -5,11 +5,10 @@ from typing import Any, NamedTuple, Union
 
 from solana._layouts.system_instructions import SYSTEM_INSTRUCTIONS_LAYOUT, InstructionType
 from solana.publickey import PublicKey
+from solana.program_pubkeys import SYS_PROGRAM_ID
 from solana.transaction import AccountMeta, Transaction, TransactionInstruction
 from solana.utils.validate import validate_instruction_keys, validate_instruction_type
 
-SYS_PROGRAM_ID: PublicKey = PublicKey("11111111111111111111111111111111")
-"""Public key that identifies the System program."""
 
 
 # Instruction Params
