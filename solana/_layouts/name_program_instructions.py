@@ -1,7 +1,7 @@
 """Byte layouts for name program instructions."""
 from enum import IntEnum
 
-from construct import Int32ul, Int64ul, Bytes, Padding
+from construct import Int32ul, Int64ul, Bytes, Padding, Byte
 from construct import Struct as cStruct
 from construct import Switch, this
 
@@ -16,9 +16,8 @@ class InstructionType(IntEnum):
     DELETE = 3
 
 
-
 _CREATE_LAYOUT = cStruct(
-    Padding(1),
+    # Javascript side of SPL Name Service does this -- do I also?
     "hashed_name_size" / Int32ul,
     "hashed_name" / Bytes(32),
     "lamports" / Int64ul,
@@ -27,7 +26,8 @@ _CREATE_LAYOUT = cStruct(
 
 _UPDATE_LAYOUT = cStruct(
         "offset" / Int32ul,
-        "data" / Bytes(this.size)
+        "size" / Int32ul,
+        "input_data" / Bytes(this.size)
         )
 
 _TRANSFER_LAYOUT = cStruct(
@@ -38,7 +38,7 @@ _DELETE_LAYOUT = cStruct()
 
 
 NAME_PROGRAM_INSTRUCTIONS_LAYOUT = cStruct(
-    "instruction_type" / Int32ul,
+    "instruction_type" / Byte,
     "args"
     / Switch(
         lambda this: this.instruction_type,
