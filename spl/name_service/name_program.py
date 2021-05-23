@@ -2,15 +2,24 @@
 from __future__ import annotations
 
 from typing import Any, NamedTuple
-from hashlib import sha256
 
 from solana.rpc.api import Client
-from solana._layouts.name_program_instructions import NAME_PROGRAM_INSTRUCTIONS_LAYOUT, InstructionType
 from solana.publickey import PublicKey
-from solana.program_pubkeys import SYS_PROGRAM_ID, NAME_PROGRAM_ID
+from solana.system_program import SYS_PROGRAM_ID
 from solana.transaction import AccountMeta, TransactionInstruction
 from solana.utils.validate import validate_instruction_keys, validate_instruction_type
 
+from spl.name_service._layouts import NAME_PROGRAM_INSTRUCTIONS_LAYOUT, InstructionType
+from spl.name_service.utils import get_hashed_name, get_name_account_address
+
+# I've seen conflicting documentation, not sure which is which?
+# This is the one from name_program Rust source code
+# NAME_PROGRAM_ID: PublicKey = PublicKey("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX")
+# And this is the one from the JS source code
+NAME_PROGRAM_ID: PublicKey = PublicKey("Gh9eN9nDuS3ysmAkKf4QJ6yBzf3YNqsn6MD8Ms3TsXmA")
+"""Public key that identifies the Solana SPL Name Service program."""
+
+REQ_INITIAL_ACCOUNT_BUFFER = 96
 
 # Instruction Params
 class CreateNameParams(NamedTuple):
@@ -23,6 +32,7 @@ class CreateNameParams(NamedTuple):
     class_account: PublicKey=SYS_PROGRAM_ID  # Signer
     parent_account: PublicKey=SYS_PROGRAM_ID
     parent_owner_account: PublicKey=SYS_PROGRAM_ID  # Signer, optional but needed if parent_account != default
+    name_program_id: PublicKey=NAME_PROGRAM_ID
 
 
 class UpdateNameParams(NamedTuple):
@@ -30,30 +40,8 @@ class UpdateNameParams(NamedTuple):
     name_account: PublicKey  # Name account to modify
     offset: int
     input_data: bytes
-    name_update_signer: PublicKey=None
-
-
-def get_hashed_name(hash_prefix: str, name: str) -> bytes:
-    """
-    Get name-based hash used in seeding the derivation of a program address.
-    """
-    return sha256((hash_prefix + name).encode()).digest()
-
-
-def get_name_account_address(seeds: list[bytes], program_id: PublicKey=NAME_PROGRAM_ID) -> bytes:
-    """
-    Get name account address in deterministic fashion based on provided seeds and program ID.
-    """
-    name_record_pubkey, _ = PublicKey.find_program_address(
-        seeds,
-        program_id
-    )
-    return name_record_pubkey
-
-
-def __check_program_id(program_id: PublicKey) -> None:
-    if program_id != SYS_PROGRAM_ID:
-        raise ValueError("invalid instruction: programId is not SystemProgram")
+    name_update_signer: PublicKey  # Owner account -- or class account if that's not default
+    name_program_id: PublicKey=NAME_PROGRAM_ID
 
 
 def __parse_and_validate_instruction(
@@ -76,7 +64,9 @@ def decode_create_name(instruction: TransactionInstruction) -> CreateNameParams:
         funding_account=instruction.keys[1].pubkey,
         hashed_name=parsed_data.args.hashed_name,
         lamports=parsed_data.args.lamports,
-        space=parsed_data.args.space)
+        space=parsed_data.args.space,
+        name_program_id=instruction.program_id
+        )
 
 
 def create_name(params: CreateNameParams) -> TransactionInstruction:
@@ -90,28 +80,17 @@ def create_name(params: CreateNameParams) -> TransactionInstruction:
                 hashed_name_size=len(params.hashed_name),
                 hashed_name=bytes(params.hashed_name),
                 lamports=params.lamports,
-                space=params.space),
+                space=params.space + REQ_INITIAL_ACCOUNT_BUFFER),
         )
     )
-    # print([hex(i) for i in data], len(data))
-    # print("seeds for hashed name", [params.hashed_name, bytes(params.class_account), bytes(params.parent_account)])
-    # print(len(b"".join(
-    #     [params.hashed_name,
-    #     bytes(params.class_account),
-    #     bytes(params.parent_account)])))
-    # name_record_pubkey = PublicKey.create_program_address(
-    # name_record_pubkey, _ = PublicKey.find_program_address(
     name_record_pubkey = get_name_account_address(
         [params.hashed_name, bytes(params.class_account), bytes(params.parent_account)],
-        NAME_PROGRAM_ID
+        params.name_program_id
     )
-    # print("name program id", NAME_PROGRAM_ID)
-    # print("hashed name", name_record_pubkey.to_base58())
     # Enforce specified parent owner account.
     if params.parent_account != SYS_PROGRAM_ID and \
             params.parent_owner_account == SYS_PROGRAM_ID:
         raise ValueError("Must specify the supplied parent name account's owner account")
-
     keys = [
         AccountMeta(pubkey=SYS_PROGRAM_ID, is_signer=False, is_writable=False),
         AccountMeta(pubkey=params.funding_account, is_signer=True, is_writable=True),
@@ -133,7 +112,7 @@ def create_name(params: CreateNameParams) -> TransactionInstruction:
         )
     return TransactionInstruction(
         keys=keys,
-        program_id=NAME_PROGRAM_ID,
+        program_id=params.name_program_id,
         data=data,
     )
 
@@ -158,24 +137,6 @@ def update_name(params: UpdateNameParams) -> TransactionInstruction:
             ]
     return TransactionInstruction(
             keys=keys,
-            program_id=NAME_PROGRAM_ID,
+            program_id=params.name_program_id,
             data=data
             )
-
-def retrieve_name_data(
-        name: str,
-        hash_prefix: str="SPL Name Service",
-        name_class: PublicKey=SYS_PROGRAM_ID,
-        name_owner: PublicKey=SYS_PROGRAM_ID,
-        endpoint='https://devnet.solana.com'
-        ):
-    hashed_name = get_hashed_name(hash_prefix, name)
-    account_key = get_name_account_address(
-        [hashed_name, bytes(name_class), bytes(name_owner)],
-        NAME_PROGRAM_ID
-        )
-    client = Client(endpoint)
-    info = client.get_account_info(
-            account_key, encoding='jsonParsed')['result']
-    print(info)
-    return info['value']['data']

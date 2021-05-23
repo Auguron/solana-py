@@ -5,7 +5,7 @@ from construct import Int32ul, Int64ul, Bytes, Padding, Byte
 from construct import Struct as cStruct
 from construct import Switch, this
 
-from .shared import PUBLIC_KEY_LAYOUT
+from solana._layouts.shared import PUBLIC_KEY_LAYOUT
 
 
 class InstructionType(IntEnum):

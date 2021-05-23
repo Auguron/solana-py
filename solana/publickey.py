@@ -72,21 +72,11 @@ class PublicKey:
     @staticmethod
     def create_program_address(seeds: List[bytes], program_id: PublicKey) -> PublicKey:
         """Derive a program address from seeds and a program ID."""
-        # for seed in seeds:
-        #     print([hex(i) for i in seed])
-        # print(len(b"".join(seeds)))
-        # print([hex(i) for i in bytes(program_id)])
-        # print([hex(i) for i in b"ProgramDerivedAddress"])
         buffer = b"".join(seeds + [bytes(program_id), b"ProgramDerivedAddress"])
-        # print(len(buffer))
         hashbytes: bytes = sha256(buffer).digest()
-        # print(hashbytes)
-        address = PublicKey(hashbytes)
-        print(hashbytes, "is valid", crypto_core_ed25519_is_valid_point(hashbytes))
-        # if crypto_core_ed25519_is_valid_point(hashbytes):
         if isoncurve(decodepoint(hashbytes)):
             raise Exception("Invalid seeds, address must fall off the curve")
-        return address
+        return PublicKey(hashbytes)
 
     @staticmethod
     def find_program_address(seeds: List[bytes], program_id: PublicKey) -> Tuple[PublicKey, int]:
@@ -98,21 +88,16 @@ class PublicKey:
         """
         nonce = 255
         address = None
-        while nonce != 251:
+        while nonce != 0:
             nonce_byte = nonce.to_bytes(1, 'little')
             seeds_with_nonce = seeds + [nonce_byte]
-            print("trying", seeds_with_nonce)
             try:
                 address = PublicKey.create_program_address(
                     seeds_with_nonce,
                     program_id
                 )
             except Exception as e:
-                print("Exception reached")
-                print(e)
                 nonce -= 1
                 continue
-            print("got", address, "with", nonce_byte)
-            # print("is valid", bytes(address), crypto_core_ed25519_is_valid_point(bytes(address)))
-            print(address, nonce_byte)
             return address, nonce_byte
+        return (None, None)

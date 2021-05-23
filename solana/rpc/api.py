@@ -16,6 +16,7 @@ from solana.transaction import Transaction
 
 from .commitment import Commitment, Max
 from .providers import http
+from .exception import SolanaException
 
 
 def DataSliceOpt(*args, **kwargs) -> types.DataSliceOpts:  # pylint: disable=invalid-name
@@ -1040,7 +1041,9 @@ class Client:  # pylint: disable=too-many-public-methods
         if resp.get("error"):
             self._provider.logger.error(resp.get("error"))
         if not resp.get("result"):
-            raise Exception("Failed to send transaction")
+            e = SolanaException("Failed to send transaction")
+            e.data = resp.get("error")
+            raise e
         if skip_confirm:
             return resp
 
