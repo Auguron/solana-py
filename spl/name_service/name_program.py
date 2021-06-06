@@ -1,16 +1,15 @@
 """Library to interface with system programs."""
 from __future__ import annotations
 
-from typing import Any, NamedTuple
+from typing import Optional, Any, NamedTuple
 
-from solana.rpc.api import Client
 from solana.publickey import PublicKey
 from solana.system_program import SYS_PROGRAM_ID
 from solana.transaction import AccountMeta, TransactionInstruction
 from solana.utils.validate import validate_instruction_keys, validate_instruction_type
 
 from spl.name_service._layouts import NAME_PROGRAM_INSTRUCTIONS_LAYOUT, InstructionType
-from spl.name_service.utils import get_hashed_name, get_name_account_address
+from spl.name_service.utils import get_name_account_address
 
 # I've seen conflicting documentation, not sure which is which?
 # This is the one from name_program Rust source code
@@ -19,6 +18,7 @@ from spl.name_service.utils import get_hashed_name, get_name_account_address
 NAME_PROGRAM_ID: PublicKey = PublicKey("Gh9eN9nDuS3ysmAkKf4QJ6yBzf3YNqsn6MD8Ms3TsXmA")
 """Public key that identifies the Solana SPL Name Service program."""
 
+# All accounts must have at least 96 bytes to store required metadata
 REQ_INITIAL_ACCOUNT_BUFFER = 96
 
 # Instruction Params
@@ -41,6 +41,21 @@ class UpdateNameParams(NamedTuple):
     offset: int
     input_data: bytes
     name_update_signer: PublicKey  # Owner account -- or class account if that's not default
+    name_program_id: PublicKey=NAME_PROGRAM_ID
+
+
+class TransferNameParams(NamedTuple):
+    name_account: PublicKey
+    new_owner_account: PublicKey
+    owner_account: PublicKey
+    class_account: PublicKey=SYS_PROGRAM_ID
+    name_program_id: PublicKey=NAME_PROGRAM_ID
+
+
+class DeleteNameParams(NamedTuple):
+    name_account: PublicKey
+    owner_account: PublicKey
+    refund_account: Optional[PublicKey]=None  # Default to owner
     name_program_id: PublicKey=NAME_PROGRAM_ID
 
 
@@ -134,6 +149,49 @@ def update_name(params: UpdateNameParams) -> TransactionInstruction:
     keys = [
             AccountMeta(params.name_account, is_signer=False, is_writable=True),
             AccountMeta(params.name_update_signer, is_signer=True, is_writable=False),
+            ]
+    return TransactionInstruction(
+            keys=keys,
+            program_id=params.name_program_id,
+            data=data
+            )
+
+def transfer_name(params: TransferNameParams) -> TransactionInstruction:
+    data = NAME_PROGRAM_INSTRUCTIONS_LAYOUT.build(
+        dict(
+            instruction_type=InstructionType.TRANSFER,
+            args=dict(
+                new_owner=params.new_owner_account
+            ),
+        )
+    )
+    keys = [
+            AccountMeta(params.name_account, is_signer=False, is_writable=True),
+            AccountMeta(params.owner_account, is_signer=True, is_writable=False),
+            ]
+    if params.class_account != SYS_PROGRAM_ID:
+        keys.append(
+            AccountMeta(params.params.class_account, is_signer=True, is_writable=False)
+                )
+    return TransactionInstruction(
+            keys=keys,
+            program_id=params.name_program_id,
+            data=data
+            )
+
+def delete_name(params: DeleteNameParams) -> TransactionInstruction:
+    # TODO clean this up, probably the whole serialization process too
+    data = NAME_PROGRAM_INSTRUCTIONS_LAYOUT.build(
+        dict(
+            instruction_type=InstructionType.DELETE,
+            args=dict()
+        )
+    )
+    refund_account = params.refund_account or params.owner_account
+    keys = [
+            AccountMeta(params.name_account, is_signer=False, is_writable=True),
+            AccountMeta(params.owner_account, is_signer=True, is_writable=False),
+            AccountMeta(refund_account, is_signer=False, is_writable=True),
             ]
     return TransactionInstruction(
             keys=keys,
