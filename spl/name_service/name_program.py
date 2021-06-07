@@ -11,10 +11,8 @@ from solana.utils.validate import validate_instruction_keys, validate_instructio
 from spl.name_service._layouts import NAME_PROGRAM_INSTRUCTIONS_LAYOUT, InstructionType
 from spl.name_service.utils import get_name_account_address
 
-# I've seen conflicting documentation, not sure which is which?
-# This is the one from name_program Rust source code
-# NAME_PROGRAM_ID: PublicKey = PublicKey("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX")
-# And this is the one from the JS source code
+MAINNET_NAME_PROGRAM_ID: PublicKey = PublicKey("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX")
+# Devnet program ID
 NAME_PROGRAM_ID: PublicKey = PublicKey("Gh9eN9nDuS3ysmAkKf4QJ6yBzf3YNqsn6MD8Ms3TsXmA")
 """Public key that identifies the Solana SPL Name Service program."""
 
@@ -161,7 +159,7 @@ def transfer_name(params: TransferNameParams) -> TransactionInstruction:
         dict(
             instruction_type=InstructionType.TRANSFER,
             args=dict(
-                new_owner=params.new_owner_account
+                new_owner=bytes(params.new_owner_account)
             ),
         )
     )
