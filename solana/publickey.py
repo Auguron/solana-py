@@ -5,9 +5,8 @@ from hashlib import sha256
 from typing import Any, List, Optional, Tuple, Union
 
 import base58
-from nacl.bindings.crypto_core import crypto_core_ed25519_is_valid_point  # type: ignore
 
-from solana.ed25519 import decodepoint, isoncurve
+from solana.utils import ed25519_base, helpers
 
 
 class PublicKey:
@@ -67,16 +66,17 @@ class PublicKey:
     @staticmethod
     def create_with_seed(from_public_key: PublicKey, seed: str, program_id: PublicKey) -> PublicKey:
         """Derive a public key from another key, a seed, and a program ID."""
-        raise NotImplementedError("create_with_seed not implemented")
+        buf = bytes(from_public_key) + seed.encode("utf-8") + bytes(program_id)
+        return PublicKey(sha256(buf).digest())
 
     @staticmethod
     def create_program_address(seeds: List[bytes], program_id: PublicKey) -> PublicKey:
         """Derive a program address from seeds and a program ID."""
         buffer = b"".join(seeds + [bytes(program_id), b"ProgramDerivedAddress"])
         hashbytes: bytes = sha256(buffer).digest()
-        if isoncurve(decodepoint(hashbytes)):
-            raise Exception("Invalid seeds, address must fall off the curve")
-        return PublicKey(hashbytes)
+        if not PublicKey._is_on_curve(hashbytes):
+            return PublicKey(hashbytes)
+        raise Exception("Invalid seeds, address must fall off the curve")
 
     @staticmethod
     def find_program_address(seeds: List[bytes], program_id: PublicKey) -> Tuple[PublicKey, int]:
@@ -87,17 +87,17 @@ class PublicKey:
         results in a valid program address.
         """
         nonce = 255
-        address = None
         while nonce != 0:
-            nonce_byte = nonce.to_bytes(1, 'little')
-            seeds_with_nonce = seeds + [nonce_byte]
             try:
-                address = PublicKey.create_program_address(
-                    seeds_with_nonce,
-                    program_id
-                )
-            except Exception as e:
+                buffer = seeds + [helpers.to_uint8_bytes(nonce)]
+                address = PublicKey.create_program_address(buffer, program_id)
+            except Exception:
                 nonce -= 1
                 continue
-            return address, nonce_byte
-        return (None, None)
+            return address, nonce
+        raise KeyError("Unable to find a viable program address nonce")
+
+    @staticmethod
+    def _is_on_curve(pubkey_bytes: bytes) -> bool:
+        """Verify the point is on curve or not."""
+        return ed25519_base.is_on_curve(pubkey_bytes)
