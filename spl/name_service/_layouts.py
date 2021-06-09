@@ -16,8 +16,10 @@ class InstructionType(IntEnum):
     DELETE = 3
 
 
+# Javascript side of SPL Name Service has this hashed_name_size variable,
+# but it is not in Rust code. Unsure why, but necessary to work.
+# TODO Since it's a sha256, I should be able to hardcode it at 32 bytes?
 _CREATE_LAYOUT = cStruct(
-    # Javascript side of SPL Name Service does this -- do I also?
     "hashed_name_size" / Int32ul,
     "hashed_name" / Bytes(32),
     "lamports" / Int64ul,

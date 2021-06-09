@@ -1,6 +1,9 @@
 from hashlib import sha256
 
 from solana.publickey import PublicKey
+from solana.system_program import SYS_PROGRAM_ID
+
+from .constants import *
 
 def get_hashed_name(hash_prefix: str, name: str) -> bytes:
     """
@@ -9,14 +12,23 @@ def get_hashed_name(hash_prefix: str, name: str) -> bytes:
     return sha256((hash_prefix + name).encode()).digest()
 
 
-def get_name_account_address(seeds: list[bytes], program_id: PublicKey) -> bytes:
+def get_name_account(
+    name: str,
+    class_account: PublicKey=SYS_PROGRAM_ID,
+    parent_account: PublicKey=SYS_PROGRAM_ID,
+    program_id: PublicKey=DEVNET_NAME_PROGRAM_ID,
+    hash_prefix: str=NAME_PROGRAM_HASH_PREFIX
+    ) -> PublicKey:
     """
-    Get name account address in deterministic fashion based on provided seeds and program ID.
+    Calculate the name account based on necessary parameters.
     """
-    name_record_pubkey, _ = PublicKey.find_program_address(
-        seeds,
-        program_id
+    hashed_name = get_hashed_name(hash_prefix, name)
+    account, _ = PublicKey.find_program_address(
+        [
+            hashed_name,
+            bytes(class_account),
+            bytes(parent_account)
+        ],
+        bytes(name_program_id)
     )
-    return name_record_pubkey
-
-
+    return account

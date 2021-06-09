@@ -9,28 +9,21 @@ from solana.transaction import AccountMeta, TransactionInstruction
 from solana.utils.validate import validate_instruction_keys, validate_instruction_type
 
 from spl.name_service._layouts import NAME_PROGRAM_INSTRUCTIONS_LAYOUT, InstructionType
-from spl.name_service.utils import get_name_account_address
-
-MAINNET_NAME_PROGRAM_ID: PublicKey = PublicKey("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX")
-# Devnet program ID
-NAME_PROGRAM_ID: PublicKey = PublicKey("Gh9eN9nDuS3ysmAkKf4QJ6yBzf3YNqsn6MD8Ms3TsXmA")
-"""Public key that identifies the Solana SPL Name Service program."""
-
-# All accounts must have at least 96 bytes to store required metadata
-REQ_INITIAL_ACCOUNT_BUFFER = 96
+from spl.name_service.constants import *
+from spl.name_service.utils import get_name_account
 
 # Instruction Params
 class CreateNameParams(NamedTuple):
     """Create name account transaction params."""
     funding_account: PublicKey  # System Address
     hashed_name: str
-    lamports: int  # TODO make it optional, and default to minimum rent req for space allocated
+    lamports: int
     space: int  # Storage space for arbitrary data
     owner_account: PublicKey=None  # Default: funding account
     class_account: PublicKey=SYS_PROGRAM_ID  # Signer
     parent_account: PublicKey=SYS_PROGRAM_ID
     parent_owner_account: PublicKey=SYS_PROGRAM_ID  # Signer, optional but needed if parent_account != default
-    name_program_id: PublicKey=NAME_PROGRAM_ID
+    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
 
 
 class UpdateNameParams(NamedTuple):
@@ -39,7 +32,7 @@ class UpdateNameParams(NamedTuple):
     offset: int
     input_data: bytes
     name_update_signer: PublicKey  # Owner account -- or class account if that's not default
-    name_program_id: PublicKey=NAME_PROGRAM_ID
+    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
 
 
 class TransferNameParams(NamedTuple):
@@ -47,14 +40,14 @@ class TransferNameParams(NamedTuple):
     new_owner_account: PublicKey
     owner_account: PublicKey
     class_account: PublicKey=SYS_PROGRAM_ID
-    name_program_id: PublicKey=NAME_PROGRAM_ID
+    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
 
 
 class DeleteNameParams(NamedTuple):
     name_account: PublicKey
     owner_account: PublicKey
     refund_account: Optional[PublicKey]=None  # Default to owner
-    name_program_id: PublicKey=NAME_PROGRAM_ID
+    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
 
 
 def __parse_and_validate_instruction(
@@ -69,8 +62,9 @@ def __parse_and_validate_instruction(
 
 
 def decode_create_name(instruction: TransactionInstruction) -> CreateNameParams:
-    """Decode a create name instruction and retrieve the instruction params.
-    """  # noqa: E501 # pylint: disable=line-too-long
+    """
+    Decode a create name instruction and retrieve the instruction params.
+    """
     parsed_data = __parse_and_validate_instruction(instruction, 6,
         InstructionType.CREATE)
     return CreateNameParams(
@@ -91,13 +85,17 @@ def create_name(params: CreateNameParams) -> TransactionInstruction:
             instruction_type=InstructionType.CREATE,
             args=dict(
                 hashed_name_size=len(params.hashed_name),
-                hashed_name=bytes(params.hashed_name),
+                hashed_name=params.hashed_name,
                 lamports=params.lamports,
                 space=params.space + REQ_INITIAL_ACCOUNT_BUFFER),
         )
     )
-    name_record_pubkey = get_name_account_address(
-        [params.hashed_name, bytes(params.class_account), bytes(params.parent_account)],
+    name_record_pubkey, _ = PublicKey.find_program_address(
+        [
+            params.hashed_name,
+            bytes(params.class_account),
+            bytes(params.parent_account)
+        ],
         params.name_program_id
     )
     # Enforce specified parent owner account.
@@ -178,7 +176,10 @@ def transfer_name(params: TransferNameParams) -> TransactionInstruction:
             )
 
 def delete_name(params: DeleteNameParams) -> TransactionInstruction:
-    # TODO clean this up, probably the whole serialization process too
+    """
+    Delete a name account created by SPL Name Service.
+    If refund account is not specified, funds are returned to account owner.
+    """
     data = NAME_PROGRAM_INSTRUCTIONS_LAYOUT.build(
         dict(
             instruction_type=InstructionType.DELETE,
