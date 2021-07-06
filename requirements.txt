@@ -18,4 +18,4 @@ six==1.16.0
 -e git+https://github.com/michaelhly/solana-py.git@a0893393f97021b0f548d640bb9c61f3c95dbc7b#egg=solana
 toml==0.10.2
 typing-extensions==3.10.0.0
-urllib3==1.26.4
+urllib3==1.26.5
