@@ -23,7 +23,7 @@ class CreateNameParams(NamedTuple):
     class_account: PublicKey=SYS_PROGRAM_ID  # Signer
     parent_account: PublicKey=SYS_PROGRAM_ID
     parent_owner_account: PublicKey=SYS_PROGRAM_ID  # Signer, optional but needed if parent_account != default
-    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
+    name_program_id: PublicKey=NAME_PROGRAM_ID
 
 
 class UpdateNameParams(NamedTuple):
@@ -32,7 +32,7 @@ class UpdateNameParams(NamedTuple):
     offset: int
     input_data: bytes
     name_update_signer: PublicKey  # Owner account -- or class account if that's not default
-    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
+    name_program_id: PublicKey=NAME_PROGRAM_ID
 
 
 class TransferNameParams(NamedTuple):
@@ -40,14 +40,14 @@ class TransferNameParams(NamedTuple):
     new_owner_account: PublicKey
     owner_account: PublicKey
     class_account: PublicKey=SYS_PROGRAM_ID
-    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
+    name_program_id: PublicKey=NAME_PROGRAM_ID
 
 
 class DeleteNameParams(NamedTuple):
     name_account: PublicKey
     owner_account: PublicKey
     refund_account: Optional[PublicKey]=None  # Default to owner
-    name_program_id: PublicKey=DEVNET_NAME_PROGRAM_ID
+    name_program_id: PublicKey=NAME_PROGRAM_ID
 
 
 def __parse_and_validate_instruction(
