@@ -16,7 +16,7 @@ def get_name_account(
     name: str,
     class_account: PublicKey=SYS_PROGRAM_ID,
     parent_account: PublicKey=SYS_PROGRAM_ID,
-    program_id: PublicKey=DEVNET_NAME_PROGRAM_ID,
+    program_id: PublicKey=NAME_PROGRAM_ID,
     hash_prefix: str=NAME_PROGRAM_HASH_PREFIX
     ) -> PublicKey:
     """
