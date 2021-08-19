@@ -6,14 +6,14 @@ from typing import Optional, Any, NamedTuple
 from solana.publickey import PublicKey
 from solana.transaction import TransactionInstruction
 
-from spl.memo.constants import MEMO_PROGRAM_ID
+from spl.memo.constants import MEMO_PROGRAM
 
 # Instruction Params
 class MemoParams(NamedTuple):
     """Create name account transaction params."""
     funding_account: PublicKey  # System Address
     data: bytes
-    memo_program_id: PublicKey=MEMO_PROGRAM_ID
+    memo_program_id: PublicKey=MEMO_PROGRAM
 
 
 def decode_memo_instruction(instruction: TransactionInstruction) -> MemoParams:
