@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Optional, Any, NamedTuple
 
 from solana.publickey import PublicKey
-from solana.transaction import TransactionInstruction
+from solana.transaction import TransactionInstruction, AccountMeta
 
 from spl.memo.constants import MEMO_PROGRAM
 
