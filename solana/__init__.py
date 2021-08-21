@@ -25,7 +25,28 @@ API Client:
 
     from solana.rpc.api import Client
 
-    http_client = Client("https://devnet.solana.com")
+    http_client = Client("https://api.devnet.solana.com")
+
+Async API Client:
+
+.. highlight:: py
+.. code-block:: py
+
+    import asyncio
+    from solana.rpc.async_api import AsyncClient
+
+    async def main():
+        async with AsyncClient("https://api.devnet.solana.com") as client:
+            res = await client.is_connected()
+        print(res)  # True
+
+        # Alternatively, close the client explicitly instead of using a context manager:
+        client = AsyncClient("https://api.devnet.solana.com")
+        res = await client.is_connected()
+        print(res)  # True
+        await client.close()
+
+    asyncio.run(main())
 
 """  # pylint: disable=line-too-long # noqa: E501
 import sys
