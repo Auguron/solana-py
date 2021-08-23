@@ -33,14 +33,6 @@ jobs:
         run: |
           pipenv run install-ci-deps
 
-      - name: Run linters
-        run: |
-          pipenv run black --check --diff --line-length=120 setup.py solana spl tests
-          pipenv run pydocstyle setup.py solana spl/**/*.py tests
-          pipenv run flake8 setup.py solana spl tests
-          pipenv run mypy solana spl
-          pipenv run pylint --rcfile=.pylintrc setup.py solana spl tests
-
       - name: Run unit tests
         run: |
           pipenv run pytest -m "not integration"
