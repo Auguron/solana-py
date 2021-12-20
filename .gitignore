@@ -30,3 +30,5 @@ dist
 
 # venv stuff
 .venv
+# solana validator logs
+test-ledger/

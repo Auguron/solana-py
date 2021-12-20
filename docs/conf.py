@@ -10,10 +10,10 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
+from pathlib import Path
 import sys
 
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, str(Path.cwd().parent / "src"))
 
 
 # -- Project information -----------------------------------------------------
@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.abspath(".."))
 project = "solana.py"
 copyright = "2020, Michael Huang"
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.4
-version = "0.11.3"
+version = "0.19.0"
 author = "Michael Huang"
 
 
@@ -52,7 +52,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "alabaster"
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

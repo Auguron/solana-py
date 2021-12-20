@@ -1,8 +1,8 @@
 Solana
 ======
 
-solana.account
---------------
+solana.account (deprecated)
+---------------------------
 
 .. automodule:: solana.account
    :members:
@@ -17,6 +17,12 @@ solana.instruction
 ------------------
 
 .. automodule:: solana.instruction
+   :members:
+
+solana.keypair
+------------------
+
+.. automodule:: solana.keypair
    :members:
 
 solana.message
@@ -34,6 +40,11 @@ solana.publickey
 solana.sysvar
 -------------
 .. automodule:: solana.sysvar
+   :members:
+
+solana.system_program
+----------------------
+.. automodule:: solana.system_program
    :members:
 
 
