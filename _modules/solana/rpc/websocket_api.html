@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>solana.rpc.websocket_api &mdash; solana.py  documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../../index.html" class="icon icon-home"> solana.py
+          </a>
+              <div class="version">
+                0.19.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../solana.html">Solana</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.async_api">Async API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.websocket_api">Websockets Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.commitment">Commitment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.types">RPC Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.providers.base">RPC Providers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../spl.html">Solana Program Library (SPL)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">solana.py</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+      <li>solana.rpc.websocket_api</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for solana.rpc.websocket_api</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;This module contains code for interacting with the RPC Websocket endpoint.&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">cast</span>
+<span class="kn">from</span> <span class="nn">json</span> <span class="kn">import</span> <span class="n">loads</span><span class="p">,</span> <span class="n">dumps</span>
+<span class="kn">from</span> <span class="nn">websockets.legacy.client</span> <span class="kn">import</span> <span class="n">connect</span> <span class="k">as</span> <span class="n">ws_connect</span><span class="p">,</span> <span class="n">WebSocketClientProtocol</span>
+<span class="kn">from</span> <span class="nn">jsonrpcserver.dispatcher</span> <span class="kn">import</span> <span class="n">create_request</span>
+<span class="kn">from</span> <span class="nn">jsonrpcclient</span> <span class="kn">import</span> <span class="n">parse</span><span class="p">,</span> <span class="n">Error</span><span class="p">,</span> <span class="n">Ok</span>
+<span class="kn">from</span> <span class="nn">apischema</span> <span class="kn">import</span> <span class="n">deserialize</span>
+
+<span class="kn">from</span> <span class="nn">solana.rpc.request_builder</span> <span class="kn">import</span> <span class="n">RequestBody</span>
+<span class="kn">from</span> <span class="nn">solana.publickey</span> <span class="kn">import</span> <span class="n">PublicKey</span>
+<span class="kn">from</span> <span class="nn">solana.transaction</span> <span class="kn">import</span> <span class="n">TransactionSignature</span>
+<span class="kn">from</span> <span class="nn">solana.rpc.commitment</span> <span class="kn">import</span> <span class="n">Commitment</span>
+<span class="kn">from</span> <span class="nn">solana.rpc</span> <span class="kn">import</span> <span class="n">types</span>
+<span class="kn">from</span> <span class="nn">solana.rpc.responses</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AccountNotification</span><span class="p">,</span>
+    <span class="n">LogsNotification</span><span class="p">,</span>
+    <span class="n">SubscriptionNotification</span><span class="p">,</span>
+    <span class="n">ProgramNotification</span><span class="p">,</span>
+    <span class="n">SignatureNotification</span><span class="p">,</span>
+    <span class="n">SlotNotification</span><span class="p">,</span>
+    <span class="n">RootNotification</span><span class="p">,</span>
+    <span class="n">SlotsUpdatesNotification</span><span class="p">,</span>
+    <span class="n">VoteNotification</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">solana.rpc.request_builder</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AccountSubscribe</span><span class="p">,</span>
+    <span class="n">AccountUnsubscribe</span><span class="p">,</span>
+    <span class="n">LogsSubscribe</span><span class="p">,</span>
+    <span class="n">LogsUnsubscribe</span><span class="p">,</span>
+    <span class="n">LogsSubscribeFilter</span><span class="p">,</span>
+    <span class="n">MentionsFilter</span><span class="p">,</span>
+    <span class="n">ProgramSubscribe</span><span class="p">,</span>
+    <span class="n">ProgramUnsubscribe</span><span class="p">,</span>
+    <span class="n">SignatureSubscribe</span><span class="p">,</span>
+    <span class="n">SignatureUnsubscribe</span><span class="p">,</span>
+    <span class="n">SlotSubscribe</span><span class="p">,</span>
+    <span class="n">SlotUnsubscribe</span><span class="p">,</span>
+    <span class="n">SlotsUpdatesSubscribe</span><span class="p">,</span>
+    <span class="n">SlotsUpdatesUnsubscribe</span><span class="p">,</span>
+    <span class="n">RootSubscribe</span><span class="p">,</span>
+    <span class="n">RootUnsubscribe</span><span class="p">,</span>
+    <span class="n">VoteSubscribe</span><span class="p">,</span>
+    <span class="n">VoteUnsubscribe</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_NOTIFICATION_MAP</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;accountNotification&quot;</span><span class="p">:</span> <span class="n">AccountNotification</span><span class="p">,</span>
+    <span class="s2">&quot;logsNotification&quot;</span><span class="p">:</span> <span class="n">LogsNotification</span><span class="p">,</span>
+    <span class="s2">&quot;programNotification&quot;</span><span class="p">:</span> <span class="n">ProgramNotification</span><span class="p">,</span>
+    <span class="s2">&quot;signatureNotification&quot;</span><span class="p">:</span> <span class="n">SignatureNotification</span><span class="p">,</span>
+    <span class="s2">&quot;slotNotification&quot;</span><span class="p">:</span> <span class="n">SlotNotification</span><span class="p">,</span>
+    <span class="s2">&quot;rootNotification&quot;</span><span class="p">:</span> <span class="n">RootNotification</span><span class="p">,</span>
+    <span class="s2">&quot;slotsUpdatesNotification&quot;</span><span class="p">:</span> <span class="n">SlotsUpdatesNotification</span><span class="p">,</span>
+    <span class="s2">&quot;voteNotification&quot;</span><span class="p">:</span> <span class="n">VoteNotification</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="SubscriptionError"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SubscriptionError">[docs]</a><span class="k">class</span> <span class="nc">SubscriptionError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Raise when subscribing to an RPC feed fails.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">err</span><span class="p">:</span> <span class="n">Error</span><span class="p">,</span> <span class="n">subscription</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Init.</span>
+
+<span class="sd">        :param err: The RPC error object.</span>
+<span class="sd">        :param subscription: The subscription message that caused the error.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">code</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">code</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">msg</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">message</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subscription</span> <span class="o">=</span> <span class="n">subscription</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">code</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">msg</span><span class="si">}</span><span class="se">\n</span><span class="s2"> Caused by subscription: </span><span class="si">{</span><span class="n">subscription</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SolanaWsClientProtocol"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol">[docs]</a><span class="k">class</span> <span class="nc">SolanaWsClientProtocol</span><span class="p">(</span><span class="n">WebSocketClientProtocol</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Subclass of ``websockets.WebSocketClientProtocol`` tailored for Solana RPC websockets.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Init. Args and kwargs are passed to ``websockets.WebSocketClientProtocol``.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sent_subscriptions</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">failed_subscriptions</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="nb">list</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">as_json_str</span> <span class="o">=</span> <span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">as_json_str</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sent_subscriptions</span><span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sent_subscriptions</span><span class="p">[</span><span class="n">req</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">req</span>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.send_data"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.send_data">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">RequestBody</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RequestBody</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Send a subscribe/unsubscribe request or list of requests.</span>
+
+<span class="sd">        Basically ``.send`` from ``websockets`` with extra parsing.</span>
+
+<span class="sd">        : param message: The request(s) to send.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">to_send</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">to_request</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">RequestBody</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">msg</span><span class="o">.</span><span class="n">to_request</span><span class="p">()</span> <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">message</span><span class="p">]</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">to_send</span><span class="p">)</span>  <span class="c1"># type: ignore</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.recv"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.recv">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
+        <span class="bp">self</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">SubscriptionNotification</span><span class="p">,</span> <span class="n">Error</span><span class="p">,</span> <span class="n">Ok</span><span class="p">]],</span> <span class="n">SubscriptionNotification</span><span class="p">,</span> <span class="n">Error</span><span class="p">,</span> <span class="n">Ok</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Receive the next message.</span>
+
+<span class="sd">        Basically ``.recv`` from ``websockets`` with extra parsing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+        <span class="n">as_json</span> <span class="o">=</span> <span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">as_json</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_process_rpc_response</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">as_json</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_rpc_response</span><span class="p">(</span><span class="n">as_json</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.account_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.account_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">account_subscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">:</span> <span class="n">PublicKey</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Subscribe to an account to receive notifications when the lamports or data change.</span>
+
+<span class="sd">        :param pubkey: Account pubkey.</span>
+<span class="sd">        :param commitment: Commitment level.</span>
+<span class="sd">        :param encoding: Encoding to use.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">AccountSubscribe</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">commitment</span><span class="p">,</span> <span class="n">encoding</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.account_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.account_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">account_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from account notifications.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">AccountUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.logs_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.logs_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">logs_subscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">filter_</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MentionsFilter</span><span class="p">]</span> <span class="o">=</span> <span class="n">LogsSubscribeFilter</span><span class="o">.</span><span class="n">ALL</span><span class="p">,</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Subscribe to transaction logging.</span>
+
+<span class="sd">        :param filter_: filter criteria for the logs. Use `LogsSubscribeFilter` to build the filter.</span>
+<span class="sd">        :param commitment: The commitment level to use.</span>
+<span class="sd">        :param encoding: The encoding to use.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">LogsSubscribe</span><span class="p">(</span><span class="n">filter_</span><span class="p">,</span> <span class="n">commitment</span><span class="p">,</span> <span class="n">encoding</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.logs_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.logs_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">logs_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from transaction logging.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">LogsUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.program_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.program_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">program_subscribe</span><span class="p">(</span>  <span class="c1"># pylint: disable=too-many-arguments</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">program_id</span><span class="p">:</span> <span class="n">PublicKey</span><span class="p">,</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">memcmp_opts</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">MemcmpOpts</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Receive notifications when the lamports or data for a given account owned by the program changes.</span>
+
+<span class="sd">        :param program_id: The program ID.</span>
+<span class="sd">        :param commitment: Commitment level to use.</span>
+<span class="sd">        :param encoding: Encoding to use.</span>
+<span class="sd">        :param data_size: Data size filter.</span>
+<span class="sd">        :param memcmp_opts: memcmp options.</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">ProgramSubscribe</span><span class="p">(</span><span class="n">program_id</span><span class="p">,</span> <span class="n">commitment</span><span class="p">,</span> <span class="n">encoding</span><span class="p">,</span> <span class="n">data_size</span><span class="p">,</span> <span class="n">memcmp_opts</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.program_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.program_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">program_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from program account notifications.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">ProgramUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.signature_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.signature_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">signature_subscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">signature</span><span class="p">:</span> <span class="n">TransactionSignature</span><span class="p">,</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Subscribe to a transaction signature to receive notification when the transaction is confirmed.</span>
+
+<span class="sd">        :param signature: The transaction signature to subscribe to.</span>
+<span class="sd">        :param commitment: Commitment level.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">SignatureSubscribe</span><span class="p">(</span><span class="n">signature</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.signature_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.signature_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">signature_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from signature notifications.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">SignatureUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.slot_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.slot_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">slot_subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Subscribe to receive notification anytime a slot is processed by the validator.&quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">SlotSubscribe</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.slot_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.slot_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">slot_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from slot notifications.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">SlotUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.slots_updates_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.slots_updates_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">slots_updates_subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Subscribe to receive a notification from the validator on a variety of updates on every slot.&quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">SlotsUpdatesSubscribe</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.slots_updates_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.slots_updates_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">slots_updates_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from slot update notifications.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">SlotsUpdatesUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.root_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.root_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">root_subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Subscribe to receive notification anytime a new root is set by the validator.&quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">RootSubscribe</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.root_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.root_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">root_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from root notifications.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">RootUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.vote_subscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.vote_subscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">vote_subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Subscribe to receive notification anytime a new vote is observed in gossip.&quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">VoteSubscribe</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SolanaWsClientProtocol.vote_unsubscribe"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.SolanaWsClientProtocol.vote_unsubscribe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">vote_unsubscribe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">subscription</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Unsubscribe from vote notifications.</span>
+
+<span class="sd">        :param subscription: ID of subscription to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">VoteUnsubscribe</span><span class="p">(</span><span class="n">subscription</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_data</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">subscription</span><span class="p">]</span></div>
+
+    <span class="k">def</span> <span class="nf">_process_rpc_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">SubscriptionNotification</span><span class="p">,</span> <span class="n">Error</span><span class="p">,</span> <span class="n">Ok</span><span class="p">]:</span>
+        <span class="n">parsed</span> <span class="o">=</span> <span class="n">_parse_rpc_response</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parsed</span><span class="p">,</span> <span class="n">Error</span><span class="p">):</span>
+            <span class="n">subscription</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sent_subscriptions</span><span class="p">[</span><span class="n">parsed</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">failed_subscriptions</span><span class="p">[</span><span class="n">parsed</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">subscription</span>
+            <span class="k">raise</span> <span class="n">SubscriptionError</span><span class="p">(</span><span class="n">parsed</span><span class="p">,</span> <span class="n">subscription</span><span class="p">)</span>
+        <span class="n">parsed_result</span> <span class="o">=</span> <span class="n">parsed</span><span class="o">.</span><span class="n">result</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">parsed_result</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">int</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span> <span class="ow">is</span> <span class="n">Ok</span><span class="p">:</span>  <span class="c1"># pylint: disable=unidiomatic-typecheck</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subscriptions</span><span class="p">[</span><span class="n">parsed_result</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sent_subscriptions</span><span class="p">[</span><span class="n">parsed</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">parsed</span></div>
+
+
+<span class="k">def</span> <span class="nf">_parse_rpc_response</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">SubscriptionNotification</span><span class="p">,</span> <span class="n">Error</span><span class="p">,</span> <span class="n">Ok</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="s2">&quot;params&quot;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+        <span class="n">req</span> <span class="o">=</span> <span class="n">create_request</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">_NOTIFICATION_MAP</span><span class="p">[</span><span class="n">req</span><span class="o">.</span><span class="n">method</span><span class="p">]</span>
+        <span class="n">res</span><span class="p">:</span> <span class="n">SubscriptionNotification</span> <span class="o">=</span> <span class="n">deserialize</span><span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">req</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">res</span>
+    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Union</span><span class="p">[</span><span class="n">Ok</span><span class="p">,</span> <span class="n">Error</span><span class="p">],</span> <span class="n">parse</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="connect"><a class="viewcode-back" href="../../../api.html#solana.rpc.websocket_api.connect">[docs]</a><span class="k">class</span> <span class="nc">connect</span><span class="p">(</span><span class="n">ws_connect</span><span class="p">):</span>  <span class="c1"># pylint: disable=invalid-name,too-few-public-methods</span>
+    <span class="sd">&quot;&quot;&quot;Solana RPC websocket connector.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uri</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ws://localhost:8900&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Init. Kwargs are passed to ``websockets.connect``.</span>
+
+<span class="sd">        :param uri: The websocket endpoint.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">create_protocol</span><span class="o">=</span><span class="n">SolanaWsClientProtocol</span><span class="p">)</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, Michael Huang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

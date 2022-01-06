@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to solana.py’s documentation! &mdash; solana.py  documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Solana" href="solana.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="#" class="icon icon-home"> solana.py
+          </a>
+              <div class="version">
+                0.19.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="solana.html">Solana</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.async_api">Async API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.websocket_api">Websockets Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.commitment">Commitment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.types">RPC Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.providers.base">RPC Providers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="spl.html">Solana Program Library (SPL)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">solana.py</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home"></a> &raquo;</li>
+      <li>Welcome to solana.py’s documentation!</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="welcome-to-solana-py-s-documentation">
+<h1>Welcome to solana.py’s documentation!<a class="headerlink" href="#welcome-to-solana-py-s-documentation" title="Permalink to this headline"></a></h1>
+<a class="reference external image-reference" href="https://pypi.org/project/solana/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/solana?color=blue" /></a>
+<a class="reference external image-reference" href="https://pypi.org/project/solana/"><img alt="PyPI pyversions" src="https://img.shields.io/pypi/pyversions/solana?color=blue" /></a>
+<a class="reference external image-reference" href="https://codecov.io/gh/michaelhly/solana-py/branch/master"><img alt="Codecov" src="https://codecov.io/gh/michaelhly/solana-py/branch/master/graph/badge.svg" /></a>
+<a class="reference external image-reference" href="https://github.com/michaelhly/solana-py/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a>
+<span class="target" id="module-solana"></span><p>Solana.py is the Python API for interfacing with the <a class="reference external" href="https://docs.solana.com/developing/clients/jsonrpc-api/">Solana JSON RPC</a>.</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline"></a></h2>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>pip install solana
+</pre></div>
+</div>
+</section>
+<section id="usage">
+<h2>Usage<a class="headerlink" href="#usage" title="Permalink to this headline"></a></h2>
+<p>General usage:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">solana</span>
+</pre></div>
+</div>
+<p>API Client:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">solana.rpc.api</span> <span class="kn">import</span> <span class="n">Client</span>
+
+<span class="n">http_client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span><span class="s2">&quot;https://api.devnet.solana.com&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Async API Client:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">solana.rpc.async_api</span> <span class="kn">import</span> <span class="n">AsyncClient</span>
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">AsyncClient</span><span class="p">(</span><span class="s2">&quot;https://api.devnet.solana.com&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">is_connected</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>  <span class="c1"># True</span>
+
+    <span class="c1"># Alternatively, close the client explicitly instead of using a context manager:</span>
+    <span class="n">client</span> <span class="o">=</span> <span class="n">AsyncClient</span><span class="p">(</span><span class="s2">&quot;https://api.devnet.solana.com&quot;</span><span class="p">)</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">is_connected</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>  <span class="c1"># True</span>
+    <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Websockets Client:</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The websockets code in solana-py is mostly just wrapping around the <a class="reference external" href="https://websockets.readthedocs.io/en/stable/index.html">websockets</a> library.</p>
+</div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">asyncstdlib</span> <span class="kn">import</span> <span class="nb">enumerate</span>
+<span class="kn">from</span> <span class="nn">solana.rpc.websocket_api</span> <span class="kn">import</span> <span class="n">connect</span>
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="s2">&quot;ws://api.devnet.solana.com&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">logs_subscribe</span><span class="p">()</span>
+        <span class="n">first_resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+        <span class="n">subscription_id</span> <span class="o">=</span> <span class="n">first_resp</span><span class="o">.</span><span class="n">result</span>
+        <span class="n">next_resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">next_resp</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">logs_unsubscribe</span><span class="p">(</span><span class="n">subscription_id</span><span class="p">)</span>
+
+    <span class="c1"># Alternatively, use the client as an infinite asynchronous iterator:</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="s2">&quot;ws://api.devnet.solana.com&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+        <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">logs_subscribe</span><span class="p">()</span>
+        <span class="n">first_resp</span> <span class="o">=</span> <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+        <span class="n">subscription_id</span> <span class="o">=</span> <span class="n">first_resp</span><span class="o">.</span><span class="n">result</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">msg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">websocket</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">idx</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">logs_unsubscribe</span><span class="p">(</span><span class="n">subscription_id</span><span class="p">)</span>
+
+<span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Additional Resources:</p>
+<p>Check out <a class="reference external" href="https://kevinheavey.github.io/anchorpy/">anchorpy</a>, a Python client for <a class="reference external" href="https://project-serum.github.io/anchor/getting-started/introduction.html">Anchor</a> based programs on Solana.</p>
+</section>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="solana.html">Solana</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.account">solana.account (deprecated)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.blockhash">solana.blockhash</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.instruction">solana.instruction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.keypair">solana.keypair</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.message">solana.message</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.publickey">solana.publickey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.sysvar">solana.sysvar</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.system_program">solana.system_program</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.transaction">solana.transaction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solana.html#module-solana.utils.helpers">solana.utils</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.async_api">Async API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.websocket_api">Websockets Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.commitment">Commitment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.types">RPC Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html#module-solana.rpc.providers.base">RPC Providers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="spl.html">Solana Program Library (SPL)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="spl.html#spl-token">SPL-Token</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline"></a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="solana.html" class="btn btn-neutral float-right" title="Solana" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, Michael Huang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>solana.rpc.async_api &mdash; solana.py  documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../../index.html" class="icon icon-home"> solana.py
+          </a>
+              <div class="version">
+                0.19.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../solana.html">Solana</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.async_api">Async API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.websocket_api">Websockets Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.commitment">Commitment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.types">RPC Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html#module-solana.rpc.providers.base">RPC Providers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../spl.html">Solana Program Library (SPL)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">solana.py</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+      <li>solana.rpc.async_api</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for solana.rpc.async_api</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Async API client to interact with the Solana JSON RPC Endpoint.&quot;&quot;&quot;</span>  <span class="c1"># pylint: disable=too-many-lines</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">time</span> <span class="kn">import</span> <span class="n">time</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">from</span> <span class="nn">solana.blockhash</span> <span class="kn">import</span> <span class="n">Blockhash</span><span class="p">,</span> <span class="n">BlockhashCache</span>
+<span class="kn">from</span> <span class="nn">solana.keypair</span> <span class="kn">import</span> <span class="n">Keypair</span>
+<span class="kn">from</span> <span class="nn">solana.publickey</span> <span class="kn">import</span> <span class="n">PublicKey</span>
+<span class="kn">from</span> <span class="nn">solana.rpc</span> <span class="kn">import</span> <span class="n">types</span>
+<span class="kn">from</span> <span class="nn">solana.transaction</span> <span class="kn">import</span> <span class="n">Transaction</span>
+
+<span class="kn">from</span> <span class="nn">.commitment</span> <span class="kn">import</span> <span class="n">COMMITMENT_RANKS</span><span class="p">,</span> <span class="n">Commitment</span><span class="p">,</span> <span class="n">Finalized</span>
+<span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">RPCException</span><span class="p">,</span> <span class="n">UnconfirmedTxError</span><span class="p">,</span> <span class="n">_ClientCore</span>
+<span class="kn">from</span> <span class="nn">.providers</span> <span class="kn">import</span> <span class="n">async_http</span>
+
+
+<div class="viewcode-block" id="AsyncClient"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient">[docs]</a><span class="k">class</span> <span class="nc">AsyncClient</span><span class="p">(</span><span class="n">_ClientCore</span><span class="p">):</span>  <span class="c1"># pylint: disable=too-many-public-methods</span>
+    <span class="sd">&quot;&quot;&quot;Async client class.</span>
+
+<span class="sd">    :param endpoint: URL of the RPC endpoint.</span>
+<span class="sd">    :param commitment: Default bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+<span class="sd">    :param blockhash_cache: (Experimental) If True, keep a cache of recent blockhashes to make</span>
+<span class="sd">        ``send_transaction`` calls faster.</span>
+<span class="sd">        You can also pass your own BlockhashCache object to customize its parameters.</span>
+
+<span class="sd">        The cache works as follows:</span>
+
+<span class="sd">        1.  Retrieve the oldest unused cached blockhash that is younger than ``ttl`` seconds,</span>
+<span class="sd">            where ``ttl`` is defined in the BlockhashCache (we prefer unused blockhashes because</span>
+<span class="sd">            reusing blockhashes can cause errors in some edge cases, and we prefer slightly</span>
+<span class="sd">            older blockhashes because they&#39;re more likely to be accepted by every validator).</span>
+<span class="sd">        2.  If there are no unused blockhashes in the cache, take the oldest used</span>
+<span class="sd">            blockhash that is younger than ``ttl`` seconds.</span>
+<span class="sd">        3.  Fetch a new recent blockhash *after* sending the transaction. This is to keep the cache up-to-date.</span>
+
+<span class="sd">        If you want something tailored to your use case, run your own loop that fetches the recent blockhash,</span>
+<span class="sd">        and pass that value in your ``.send_transaction`` calls.</span>
+<span class="sd">    :param timeout: HTTP request timeout in seconds.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">endpoint</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">blockhash_cache</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BlockhashCache</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Init API client.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">commitment</span><span class="p">,</span> <span class="n">blockhash_cache</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span> <span class="o">=</span> <span class="n">async_http</span><span class="o">.</span><span class="n">AsyncHTTPProvider</span><span class="p">(</span><span class="n">endpoint</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="fm">__aenter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;AsyncClient&quot;</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Use as a context manager.&quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="fm">__aenter__</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="fm">__aexit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_exc_type</span><span class="p">,</span> <span class="n">_exc</span><span class="p">,</span> <span class="n">_tb</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Exits the context manager.&quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="AsyncClient.close"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.close">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Use this when you are done with the client.&quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="AsyncClient.is_connected"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.is_connected">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">is_connected</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Health check.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.is_connected()) # doctest: +SKIP</span>
+<span class="sd">        True</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">is_connected</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_balance"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_balance">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_balance</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">PublicKey</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the balance of the account of provided Pubkey.</span>
+
+<span class="sd">        :param pubkey: Pubkey of account to query, as base-58 encoded string or PublicKey object.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_balance(PublicKey(1))) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 228}, &#39;value&#39;: 0}, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_balance_args</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_account_info"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_account_info">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_account_info</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">PublicKey</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;base64&quot;</span><span class="p">,</span>
+        <span class="n">data_slice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">DataSliceOpts</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns all the account info for the specified public key.</span>
+
+<span class="sd">        :param pubkey: Pubkey of account to query, as base-58 encoded string or PublicKey object.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+<span class="sd">        :param encoding: (optional) Encoding for Account data, either &quot;base58&quot; (slow), &quot;base64&quot;, or</span>
+<span class="sd">            &quot;jsonParsed&quot;. Default is &quot;base64&quot;.</span>
+
+<span class="sd">            - &quot;base58&quot; is limited to Account data of less than 128 bytes.</span>
+<span class="sd">            - &quot;base64&quot; will return base64 encoded data for Account data of any size.</span>
+<span class="sd">            - &quot;jsonParsed&quot; encoding attempts to use program-specific state parsers to return more human-readable and explicit account state data.</span>
+
+<span class="sd">            If jsonParsed is requested but a parser cannot be found, the field falls back to base64 encoding,</span>
+<span class="sd">            detectable when the data field is type. (jsonParsed encoding is UNSTABLE).</span>
+<span class="sd">        :param data_slice: (optional) Option to limit the returned account data using the provided `offset`: &lt;usize&gt; and</span>
+<span class="sd">            `length`: &lt;usize&gt; fields; only available for &quot;base58&quot; or &quot;base64&quot; encoding.</span>
+
+<span class="sd">        &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_account_info(PublicKey(1))) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 33265073},</span>
+<span class="sd">          &#39;value&#39;: {&#39;data&#39;: &#39;&#39;,</span>
+<span class="sd">           &#39;executable&#39;: False,</span>
+<span class="sd">           &#39;lamports&#39;: 4459816188034584,</span>
+<span class="sd">           &#39;owner&#39;: &#39;11111111111111111111111111111111&#39;,</span>
+<span class="sd">           &#39;rentEpoch&#39;: 90}},</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_account_info_args</span><span class="p">(</span>
+            <span class="n">pubkey</span><span class="o">=</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">commitment</span><span class="o">=</span><span class="n">commitment</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span> <span class="n">data_slice</span><span class="o">=</span><span class="n">data_slice</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_block_commitment"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_block_commitment">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_block_commitment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slot</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Fetch the commitment for particular block.</span>
+
+<span class="sd">        :param slot: Block, identified by Slot.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_block_commitment(0)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;commitment&#39;: [0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           0,</span>
+<span class="sd">           497717120],</span>
+<span class="sd">          &#39;totalStake&#39;: 497717120},</span>
+<span class="sd">          &#39;id&#39;: 1}}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_block_commitment_args</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_block_time"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_block_time">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_block_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slot</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Fetch the estimated production time of a block.</span>
+
+<span class="sd">        :param slot: Block, identified by Slot.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_block_time(5)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: 1598400007, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_block_time_args</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_cluster_nodes"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_cluster_nodes">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_cluster_nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns information about all the nodes participating in the cluster.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_cluster_nodes()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: [{&#39;gossip&#39;: &#39;127.0.0.1:8001&#39;,</span>
+<span class="sd">           &#39;pubkey&#39;: &#39;LjvEBM78ufAikBfxqtj4RNiAECUi7Xqtz9k3QM3DzPk&#39;,</span>
+<span class="sd">           &#39;rpc&#39;: &#39;127.0.0.1:8899&#39;,</span>
+<span class="sd">           &#39;tpu&#39;: &#39;127.0.0.1:8003&#39;,</span>
+<span class="sd">           &#39;version&#39;: &#39;1.4.0 5332fcad&#39;}],</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_cluster_nodes</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_confirmed_block"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_confirmed_block">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_confirmed_block</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">slot</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;json&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns identity and transaction information about a confirmed block in the ledger.</span>
+
+<span class="sd">        :param slot: Slot, as u64 integer.</span>
+<span class="sd">        :param encoding: (optional) Encoding for the returned Transaction, either &quot;json&quot;, &quot;jsonParsed&quot;,</span>
+<span class="sd">            &quot;base58&quot; (slow), or &quot;base64&quot;. If parameter not provided, the default encoding is JSON.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_confirmed_block(1)O # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;blockTime&#39;: None,</span>
+<span class="sd">          &#39;blockhash&#39;: &#39;39pJzWsPn59k2PuHqhB7xNYBNGFXcFVkXLertHPBV4Tj&#39;,</span>
+<span class="sd">          &#39;parentSlot&#39;: 0,</span>
+<span class="sd">          &#39;previousBlockhash&#39;: &#39;EwF9gtehrrvPUoNticgmiEadAWzn4XeN8bNaNVBkS6S2&#39;,</span>
+<span class="sd">          &#39;rewards&#39;: [],</span>
+<span class="sd">          &#39;transactions&#39;: [{&#39;meta&#39;: {&#39;err&#39;: None,</span>
+<span class="sd">             &#39;fee&#39;: 0,</span>
+<span class="sd">             &#39;postBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;preBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;status&#39;: {&#39;Ok&#39;: None}},</span>
+<span class="sd">            &#39;transaction&#39;: {&#39;message&#39;: {&#39;accountKeys&#39;: [&#39;LjvEBM78ufAikBfxqtj4RNiAECUi7Xqtz9k3QM3DzPk&#39;,</span>
+<span class="sd">               &#39;EKAar3bMQUZvGSonq7vcPF2nPaCYowbnat44FPafW8Po&#39;,</span>
+<span class="sd">               &#39;SysvarS1otHashes111111111111111111111111111&#39;,</span>
+<span class="sd">               &#39;SysvarC1ock11111111111111111111111111111111&#39;,</span>
+<span class="sd">               &#39;Vote111111111111111111111111111111111111111&#39;],</span>
+<span class="sd">              &#39;header&#39;: {&#39;numReadonlySignedAccounts&#39;: 0,</span>
+<span class="sd">               &#39;numReadonlyUnsignedAccounts&#39;: 3,</span>
+<span class="sd">               &#39;numRequiredSignatures&#39;: 1},</span>
+<span class="sd">              &#39;instructions&#39;: [{&#39;accounts&#39;: [1, 2, 3, 0],</span>
+<span class="sd">                &#39;data&#39;: &#39;37u9WtQpcm6ULa3VmTgTKEBCtYMxq84mk82tRvKdFEwj3rALiptAzuMJ1yoVSFAMARMZYp7q&#39;,</span>
+<span class="sd">                &#39;programIdIndex&#39;: 4}],</span>
+<span class="sd">              &#39;recentBlockhash&#39;: &#39;EwF9gtehrrvPUoNticgmiEadAWzn4XeN8bNaNVBkS6S2&#39;},</span>
+<span class="sd">             &#39;signatures&#39;: [&#39;63jnpMCs7TNnCjnTqUrX7Mvqc5CbJMtVkLxBjPHUQkjXyZrQuZpfhjvzA7A29D9tMqVaiQC3UNP1NeaZKFFHJyQE&#39;]}}]},</span>
+<span class="sd">         &#39;id&#39;: 9}</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_confirmed_block(1, encoding=&quot;base64&quot;)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;blockTime&#39;: None,</span>
+<span class="sd">          &#39;blockhash&#39;: &#39;39pJzWsPn59k2PuHqhB7xNYBNGFXcFVkXLertHPBV4Tj&#39;,</span>
+<span class="sd">          &#39;parentSlot&#39;: 0,</span>
+<span class="sd">          &#39;previousBlockhash&#39;: &#39;EwF9gtehrrvPUoNticgmiEadAWzn4XeN8bNaNVBkS6S2&#39;,</span>
+<span class="sd">          &#39;rewards&#39;: [],</span>
+<span class="sd">          &#39;transactions&#39;: [{&#39;meta&#39;: {&#39;err&#39;: None,</span>
+<span class="sd">             &#39;fee&#39;: 0,</span>
+<span class="sd">             &#39;postBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;preBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;status&#39;: {&#39;Ok&#39;: None}},</span>
+<span class="sd">            &#39;transaction&#39;: [&#39;AfxyKHmHIjXWjkyHODGeAbVxmfQWPj1ydS9nF+ynJHo8I1vCPDp2P9Cj5aA6W1CAHEHCqY0B1FDKomCzRo3qrAsBAAMFBQ6QBWfhQF7rG02xhuEsmmrUtz3AUjBtJKkqaHPJEmvFzziDX0C0robPrl9RbOyXHoc9/Dxa0zoGL6cEjvCjLgan1RcZLwqvxvJl4/t3zHragsUp0L47E24tAFUgAAAABqfVFxjHdMkoVmOYaR1etoteuKObS21cc1VbIQAAAAAHYUgdNXR0u3xNdiTr072z2DVec9EQQ/wNo1OAAAAAAM8NSv7ISDPN9E9XNL9vX7h8LuJHWlopUcX39DxsDx23AQQEAQIDADUCAAAAAQAAAAAAAAAAAAAAAAAAAIWWp5Il3Kg312pzVk6Jt61iyFhTbtmkh/ORbj3JUQRbAA==&#39;,</span>
+<span class="sd">             &#39;base64&#39;]}]},</span>
+<span class="sd">         &#39;id&#39;: 10}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_confirmed_block_args</span><span class="p">(</span><span class="n">slot</span><span class="p">,</span> <span class="n">encoding</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_block"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_block">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_block</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">slot</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;json&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns identity and transaction information about a confirmed block in the ledger.</span>
+
+<span class="sd">        :param slot: Slot, as u64 integer.</span>
+<span class="sd">        :param encoding: (optional) Encoding for the returned Transaction, either &quot;json&quot;, &quot;jsonParsed&quot;,</span>
+<span class="sd">            &quot;base58&quot; (slow), or &quot;base64&quot;. If parameter not provided, the default encoding is JSON.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_block(1)O # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;blockTime&#39;: None, &#39;blockHeight&#39;: 0,</span>
+<span class="sd">          &#39;blockhash&#39;: &#39;39pJzWsPn59k2PuHqhB7xNYBNGFXcFVkXLertHPBV4Tj&#39;,</span>
+<span class="sd">          &#39;parentSlot&#39;: 0,</span>
+<span class="sd">          &#39;previousBlockhash&#39;: &#39;EwF9gtehrrvPUoNticgmiEadAWzn4XeN8bNaNVBkS6S2&#39;,</span>
+<span class="sd">          &#39;rewards&#39;: [],</span>
+<span class="sd">          &#39;transactions&#39;: [{&#39;meta&#39;: {&#39;err&#39;: None,</span>
+<span class="sd">             &#39;fee&#39;: 0,</span>
+<span class="sd">             &#39;postBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;preBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;status&#39;: {&#39;Ok&#39;: None}},</span>
+<span class="sd">            &#39;transaction&#39;: {&#39;message&#39;: {&#39;accountKeys&#39;: [&#39;LjvEBM78ufAikBfxqtj4RNiAECUi7Xqtz9k3QM3DzPk&#39;,</span>
+<span class="sd">               &#39;EKAar3bMQUZvGSonq7vcPF2nPaCYowbnat44FPafW8Po&#39;,</span>
+<span class="sd">               &#39;SysvarS1otHashes111111111111111111111111111&#39;,</span>
+<span class="sd">               &#39;SysvarC1ock11111111111111111111111111111111&#39;,</span>
+<span class="sd">               &#39;Vote111111111111111111111111111111111111111&#39;],</span>
+<span class="sd">              &#39;header&#39;: {&#39;numReadonlySignedAccounts&#39;: 0,</span>
+<span class="sd">               &#39;numReadonlyUnsignedAccounts&#39;: 3,</span>
+<span class="sd">               &#39;numRequiredSignatures&#39;: 1},</span>
+<span class="sd">              &#39;instructions&#39;: [{&#39;accounts&#39;: [1, 2, 3, 0],</span>
+<span class="sd">                &#39;data&#39;: &#39;37u9WtQpcm6ULa3VmTgTKEBCtYMxq84mk82tRvKdFEwj3rALiptAzuMJ1yoVSFAMARMZYp7q&#39;,</span>
+<span class="sd">                &#39;programIdIndex&#39;: 4}],</span>
+<span class="sd">              &#39;recentBlockhash&#39;: &#39;EwF9gtehrrvPUoNticgmiEadAWzn4XeN8bNaNVBkS6S2&#39;},</span>
+<span class="sd">             &#39;signatures&#39;: [&#39;63jnpMCs7TNnCjnTqUrX7Mvqc5CbJMtVkLxBjPHUQkjXyZrQuZpfhjvzA7A29D9tMqVaiQC3UNP1NeaZKFFHJyQE&#39;]}}]},</span>
+<span class="sd">         &#39;id&#39;: 9}</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_block(1, encoding=&quot;base64&quot;)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;blockTime&#39;: None, &#39;blockHeight&#39;: 0,</span>
+<span class="sd">          &#39;blockhash&#39;: &#39;39pJzWsPn59k2PuHqhB7xNYBNGFXcFVkXLertHPBV4Tj&#39;,</span>
+<span class="sd">          &#39;parentSlot&#39;: 0,</span>
+<span class="sd">          &#39;previousBlockhash&#39;: &#39;EwF9gtehrrvPUoNticgmiEadAWzn4XeN8bNaNVBkS6S2&#39;,</span>
+<span class="sd">          &#39;rewards&#39;: [],</span>
+<span class="sd">          &#39;transactions&#39;: [{&#39;meta&#39;: {&#39;err&#39;: None,</span>
+<span class="sd">             &#39;fee&#39;: 0,</span>
+<span class="sd">             &#39;postBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;preBalances&#39;: [500000000000, 26858640, 1, 1, 1],</span>
+<span class="sd">             &#39;status&#39;: {&#39;Ok&#39;: None}},</span>
+<span class="sd">            &#39;transaction&#39;: [&#39;AfxyKHmHIjXWjkyHODGeAbVxmfQWPj1ydS9nF+ynJHo8I1vCPDp2P9Cj5aA6W1CAHEHCqY0B1FDKomCzRo3qrAsBAAMFBQ6QBWfhQF7rG02xhuEsmmrUtz3AUjBtJKkqaHPJEmvFzziDX0C0robPrl9RbOyXHoc9/Dxa0zoGL6cEjvCjLgan1RcZLwqvxvJl4/t3zHragsUp0L47E24tAFUgAAAABqfVFxjHdMkoVmOYaR1etoteuKObS21cc1VbIQAAAAAHYUgdNXR0u3xNdiTr072z2DVec9EQQ/wNo1OAAAAAAM8NSv7ISDPN9E9XNL9vX7h8LuJHWlopUcX39DxsDx23AQQEAQIDADUCAAAAAQAAAAAAAAAAAAAAAAAAAIWWp5Il3Kg312pzVk6Jt61iyFhTbtmkh/ORbj3JUQRbAA==&#39;,</span>
+<span class="sd">             &#39;base64&#39;]}]},</span>
+<span class="sd">         &#39;id&#39;: 10}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_block_args</span><span class="p">(</span><span class="n">slot</span><span class="p">,</span> <span class="n">encoding</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_confirmed_blocks"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_confirmed_blocks">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_confirmed_blocks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start_slot</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">end_slot</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns a list of confirmed blocks.</span>
+
+<span class="sd">        :param start_slot: Start slot, as u64 integer.</span>
+<span class="sd">        :param end_slot: (optional) End slot, as u64 integer.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_confirmed_blocks(5, 10)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: [5, 6, 7, 8, 9, 10], &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_confirmed_blocks_args</span><span class="p">(</span><span class="n">start_slot</span><span class="p">,</span> <span class="n">end_slot</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_blocks"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_blocks">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_blocks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start_slot</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">end_slot</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns a list of confirmed blocks.</span>
+
+<span class="sd">        :param start_slot: Start slot, as u64 integer.</span>
+<span class="sd">        :param end_slot: (optional) End slot, as u64 integer.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_blocks(5, 10)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: [5, 6, 7, 8, 9, 10], &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_blocks_args</span><span class="p">(</span><span class="n">start_slot</span><span class="p">,</span> <span class="n">end_slot</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_confirmed_signature_for_address2"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_confirmed_signature_for_address2">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_confirmed_signature_for_address2</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">account</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Keypair</span><span class="p">,</span> <span class="n">PublicKey</span><span class="p">],</span>
+        <span class="n">before</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">until</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">limit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns confirmed signatures for transactions involving an address.</span>
+
+<span class="sd">        Signatures are returned backwards in time from the provided signature or</span>
+<span class="sd">        most recent confirmed block.</span>
+
+<span class="sd">        :param account: Account to be queried.</span>
+<span class="sd">        :param before: (optional) Start searching backwards from this transaction signature.</span>
+<span class="sd">            If not provided the search starts from the top of the highest max confirmed block.</span>
+<span class="sd">        :param until: (optional) Search until this transaction signature, if found before limit reached.</span>
+<span class="sd">        :param limit: (optoinal) Maximum transaction signatures to return (between 1 and 1,000, default: 1,000).</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_confirmed_signature_for_address2(&quot;Vote111111111111111111111111111111111111111&quot;, limit=1)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: [{&#39;err&#39;: None,</span>
+<span class="sd">           &#39;memo&#39;: None,</span>
+<span class="sd">           &#39;signature&#39;: &#39;v1BK8XcaPBzAGd7TB1K53pMdi6TBGe5CLCgx8cmZ4Bj63ZNvA6ca2QaxFpBFdvmpoFQ51VorBjifkBGLTDhwpqN&#39;,</span>
+<span class="sd">           &#39;slot&#39;: 4290}],</span>
+<span class="sd">         &#39;id&#39;: 2}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_confirmed_signature_for_address2_args</span><span class="p">(</span><span class="n">account</span><span class="p">,</span> <span class="n">before</span><span class="p">,</span> <span class="n">until</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_signatures_for_address"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_signatures_for_address">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_signatures_for_address</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">account</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Keypair</span><span class="p">,</span> <span class="n">PublicKey</span><span class="p">],</span>
+        <span class="n">before</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">until</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">limit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns confirmed signatures for transactions involving an address.</span>
+
+<span class="sd">        Signatures are returned backwards in time from the provided signature or</span>
+<span class="sd">        most recent confirmed block.</span>
+
+<span class="sd">        :param account: Account to be queried.</span>
+<span class="sd">        :param before: (optional) Start searching backwards from this transaction signature.</span>
+<span class="sd">            If not provided the search starts from the top of the highest max confirmed block.</span>
+<span class="sd">        :param until: (optional) Search until this transaction signature, if found before limit reached.</span>
+<span class="sd">        :param limit: (optional) Maximum transaction signatures to return (between 1 and 1,000, default: 1,000).</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_signatures_for_address(&quot;Vote111111111111111111111111111111111111111&quot;, limit=1)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: [{&#39;err&#39;: None,</span>
+<span class="sd">           &#39;memo&#39;: None,</span>
+<span class="sd">           &#39;signature&#39;: &#39;v1BK8XcaPBzAGd7TB1K53pMdi6TBGe5CLCgx8cmZ4Bj63ZNvA6ca2QaxFpBFdvmpoFQ51VorBjifkBGLTDhwpqN&#39;,</span>
+<span class="sd">           &#39;slot&#39;: 4290}],</span>
+<span class="sd">         &#39;id&#39;: 2}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_signatures_for_address_args</span><span class="p">(</span><span class="n">account</span><span class="p">,</span> <span class="n">before</span><span class="p">,</span> <span class="n">until</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_confirmed_transaction"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_confirmed_transaction">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_confirmed_transaction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tx_sig</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;json&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns transaction details for a confirmed transaction.</span>
+
+<span class="sd">        :param tx_sig: Transaction signature as base-58 encoded string N encoding attempts to use program-specific</span>
+<span class="sd">            instruction parsers to return more human-readable and explicit data in the</span>
+<span class="sd">            `transaction.message.instructions` list.</span>
+<span class="sd">        :param encoding: (optional) Encoding for the returned Transaction, either &quot;json&quot;, &quot;jsonParsed&quot;,</span>
+<span class="sd">            &quot;base58&quot; (slow), or &quot;base64&quot;. If parameter not provided, the default encoding is JSON.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_confirmed_transaction(&quot;3PtGYH77LhhQqTXP4SmDVJ85hmDieWsgXCUbn14v7gYyVYPjZzygUQhTk3bSTYnfA48vCM1rmWY7zWL3j1EVKmEy&quot;)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;meta&#39;: {&#39;err&#39;: None,</span>
+<span class="sd">           &#39;fee&#39;: 5000,</span>
+<span class="sd">           &#39;postBalances&#39;: [498449233720610510, 1000001001987940, 1],</span>
+<span class="sd">           &#39;preBalances&#39;: [498449233721615510, 1000001000987940, 1],</span>
+<span class="sd">           &#39;status&#39;: {&#39;Ok&#39;: None}},</span>
+<span class="sd">          &#39;slot&#39;: 1659335,</span>
+<span class="sd">          &#39;transaction&#39;: {&#39;message&#39;: {&#39;accountKeys&#39;: [&#39;9B5XszUGdMaxCZ7uSQhPzdks5ZQSmWxrmzCSvtJ6Ns6g&#39;,</span>
+<span class="sd">             &#39;2KW2XRd9kwqet15Aha2oK3tYvd3nWbTFH1MBiRAv1BE1&#39;,</span>
+<span class="sd">             &#39;11111111111111111111111111111111&#39;],</span>
+<span class="sd">            &#39;header&#39;: {&#39;numReadonlySignedAccounts&#39;: 0,</span>
+<span class="sd">             &#39;numReadonlyUnsignedAccounts&#39;: 1,</span>
+<span class="sd">             &#39;numRequiredSignatures&#39;: 1},</span>
+<span class="sd">            &#39;instructions&#39;: [{&#39;accounts&#39;: [0, 1],</span>
+<span class="sd">              &#39;data&#39;: &#39;3Bxs4Bc3VYuGVB19&#39;,</span>
+<span class="sd">              &#39;programIdIndex&#39;: 2}],</span>
+<span class="sd">            &#39;recentBlockhash&#39;: &#39;FwcsKNptGtMLccXAA9YgnivVFK95mKzECLT1DNPi3SDr&#39;},</span>
+<span class="sd">           &#39;signatures&#39;: [&#39;3PtGYH77LhhQqTXP4SmDVJ85hmDieWsgXCUbn14v7gYyVYPjZzygUQhTk3bSTYnfA48vCM1rmWY7zWL3j1EVKmEy&#39;]}},</span>
+<span class="sd">         &#39;id&#39;: 4}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_confirmed_transaction_args</span><span class="p">(</span><span class="n">tx_sig</span><span class="p">,</span> <span class="n">encoding</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_transaction"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_transaction">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_transaction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tx_sig</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;json&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns transaction details for a confirmed transaction.</span>
+
+<span class="sd">        :param tx_sig: Transaction signature as base-58 encoded string N encoding attempts to use program-specific</span>
+<span class="sd">            instruction parsers to return more human-readable and explicit data in the</span>
+<span class="sd">            `transaction.message.instructions` list.</span>
+<span class="sd">        :param encoding: (optional) Encoding for the returned Transaction, either &quot;json&quot;, &quot;jsonParsed&quot;,</span>
+<span class="sd">            &quot;base58&quot; (slow), or &quot;base64&quot;. If parameter not provided, the default encoding is JSON.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_transaction(&quot;3PtGYH77LhhQqTXP4SmDVJ85hmDieWsgXCUbn14v7gYyVYPjZzygUQhTk3bSTYnfA48vCM1rmWY7zWL3j1EVKmEy&quot;)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;meta&#39;: {&#39;err&#39;: None,</span>
+<span class="sd">           &#39;fee&#39;: 5000, &#39;rewards&#39;: [],</span>
+<span class="sd">           &#39;postBalances&#39;: [498449233720610510, 1000001001987940, 1],</span>
+<span class="sd">           &#39;preBalances&#39;: [498449233721615510, 1000001000987940, 1],</span>
+<span class="sd">           &#39;status&#39;: {&#39;Ok&#39;: None}},</span>
+<span class="sd">          &#39;slot&#39;: 1659335,</span>
+<span class="sd">          &#39;transaction&#39;: {&#39;message&#39;: {&#39;accountKeys&#39;: [&#39;9B5XszUGdMaxCZ7uSQhPzdks5ZQSmWxrmzCSvtJ6Ns6g&#39;,</span>
+<span class="sd">             &#39;2KW2XRd9kwqet15Aha2oK3tYvd3nWbTFH1MBiRAv1BE1&#39;,</span>
+<span class="sd">             &#39;11111111111111111111111111111111&#39;],</span>
+<span class="sd">            &#39;header&#39;: {&#39;numReadonlySignedAccounts&#39;: 0,</span>
+<span class="sd">             &#39;numReadonlyUnsignedAccounts&#39;: 1,</span>
+<span class="sd">             &#39;numRequiredSignatures&#39;: 1},</span>
+<span class="sd">            &#39;instructions&#39;: [{&#39;accounts&#39;: [0, 1],</span>
+<span class="sd">              &#39;data&#39;: &#39;3Bxs4Bc3VYuGVB19&#39;,</span>
+<span class="sd">              &#39;programIdIndex&#39;: 2}],</span>
+<span class="sd">            &#39;recentBlockhash&#39;: &#39;FwcsKNptGtMLccXAA9YgnivVFK95mKzECLT1DNPi3SDr&#39;},</span>
+<span class="sd">           &#39;signatures&#39;: [&#39;3PtGYH77LhhQqTXP4SmDVJ85hmDieWsgXCUbn14v7gYyVYPjZzygUQhTk3bSTYnfA48vCM1rmWY7zWL3j1EVKmEy&#39;]}},</span>
+<span class="sd">         &#39;id&#39;: 4}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_transaction_args</span><span class="p">(</span><span class="n">tx_sig</span><span class="p">,</span> <span class="n">encoding</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_epoch_info"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_epoch_info">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_epoch_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns information about the current epoch.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_epoch_info()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;absoluteSlot&#39;: 5150,</span>
+<span class="sd">          &#39;blockHeight&#39;: 5150,</span>
+<span class="sd">          &#39;epoch&#39;: 0,</span>
+<span class="sd">          &#39;slotIndex&#39;: 5150,</span>
+<span class="sd">          &#39;slotsInEpoch&#39;: 8192},</span>
+<span class="sd">         &#39;id&#39;: 5}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_epoch_info_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_epoch_schedule"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_epoch_schedule">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_epoch_schedule</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns epoch schedule information from this cluster&#39;s genesis config.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_epoch_schedule()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;firstNormalEpoch&#39;: 0,</span>
+<span class="sd">          &#39;firstNormalSlot&#39;: 0,</span>
+<span class="sd">          &#39;leaderScheduleSlotOffset&#39;: 8192,</span>
+<span class="sd">          &#39;slotsPerEpoch&#39;: 8192,</span>
+<span class="sd">          &#39;warmup&#39;: False},</span>
+<span class="sd">         &#39;id&#39;: 6}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_epoch_schedule</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_fee_calculator_for_blockhash"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_fee_calculator_for_blockhash">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_fee_calculator_for_blockhash</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">blockhash</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Blockhash</span><span class="p">],</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the fee calculator associated with the query blockhash, or null if the blockhash has expired.</span>
+
+<span class="sd">        :param blockhash: Blockhash to query as a Base58 encoded string.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_fee_calculator_for_blockhash(&quot;BaQSR194dC4dZaRxATtxYyEwDkk7VgqUY8NVNkub8HFZ&quot;)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 7065},</span>
+<span class="sd">          &#39;value&#39;: {&#39;feeCalculator&#39;: {&#39;lamportsPerSignature&#39;: 5000}}},</span>
+<span class="sd">         &#39;id&#39;: 4}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_fee_calculator_for_blockhash_args</span><span class="p">(</span><span class="n">blockhash</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_fee_rate_governor"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_fee_rate_governor">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_fee_rate_governor</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the fee rate governor information from the root bank.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_fee_rate_governor()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 7172},</span>
+<span class="sd">          &#39;value&#39;: {&#39;feeRateGovernor&#39;: {&#39;burnPercent&#39;: 50,</span>
+<span class="sd">            &#39;maxLamportsPerSignature&#39;: 100000,</span>
+<span class="sd">            &#39;minLamportsPerSignature&#39;: 5000,</span>
+<span class="sd">            &#39;targetLamportsPerSignature&#39;: 10000,</span>
+<span class="sd">            &#39;targetSignaturesPerSlot&#39;: 20000}}},</span>
+<span class="sd">         &#39;id&#39;: 5}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_fee_rate_governor</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_fees"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_fees">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_fees</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns a recent block hash from the ledger, a fee schedule and the last slot the blockhash will be valid.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_fees()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 7727},</span>
+<span class="sd">          &#39;value&#39;: {&#39;blockhash&#39;: &#39;GGS6AEDqjF5irU6D6VQNherEZ2hckGaeBiVdfSZKg4gd&#39;,</span>
+<span class="sd">           &#39;feeCalculator&#39;: {&#39;lamportsPerSignature&#39;: 5000},</span>
+<span class="sd">           &#39;lastValidSlot&#39;: 8027}},</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_fees_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_first_available_block"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_first_available_block">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_first_available_block</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the slot of the lowest confirmed block that has not been purged from the ledger.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_fees()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: 1, &#39;id&#39;: 2}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_first_available_block</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_genesis_hash"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_genesis_hash">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_genesis_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the genesis hash.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_genesis_hash()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: &#39;EwF9gtehrrvPUoNticgmiEadAWzn4XeN8bNaNVBkS6S2&#39;,</span>
+<span class="sd">         &#39;id&#39;: 3}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_genesis_hash</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_identity"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_identity">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_identity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the identity pubkey for the current node.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_identity()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;identity&#39;: &#39;LjvEBM78ufAikBfxqtj4RNiAECUi7Xqtz9k3QM3DzPk&#39;},</span>
+<span class="sd">         &#39;id&#39;: 4}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_identity</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_inflation_governor"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_inflation_governor">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_inflation_governor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the current inflation governor.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_inflation_governor()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;foundation&#39;: 0.05,</span>
+<span class="sd">          &#39;foundationTerm&#39;: 7.0,</span>
+<span class="sd">          &#39;initial&#39;: 0.15,</span>
+<span class="sd">          &#39;taper&#39;: 0.15,</span>
+<span class="sd">          &#39;terminal&#39;: 0.015},</span>
+<span class="sd">         &#39;id&#39;: 5}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_inflation_governor_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_inflation_rate"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_inflation_rate">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_inflation_rate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the specific inflation values for the current epoch.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_inflation_rate()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;epoch&#39;: 1,</span>
+<span class="sd">          &#39;foundation&#39;: 0.007499746885736559,</span>
+<span class="sd">          &#39;total&#39;: 0.14999493771473116,</span>
+<span class="sd">          &#39;validator&#39;: 0.1424951908289946},</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_inflation_rate</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_largest_accounts"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_largest_accounts">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_largest_accounts</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">filter_opt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the 20 largest accounts, by lamport balance.</span>
+
+<span class="sd">        :param opt: Filter results by account type; currently supported: circulating|nonCirculating.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_largest_accounts()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 8890},</span>
+<span class="sd">          &#39;value&#39;: [{&#39;address&#39;: &#39;95L7AsBCLRsqghsi6ksZkzjNbs6rqDgHCzKaGZ7bJi75&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 500000000000000000},</span>
+<span class="sd">           {&#39;address&#39;: &#39;APnSR52EC1eH676m7qTBHUJ1nrGpHYpV7XKPxgRDD8gX&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 164511033098290000},</span>
+<span class="sd">           {&#39;address&#39;: &#39;13LeFbG6m2EP1fqCj9k66fcXsoTHMMtgr7c78AivUrYD&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 153333632446109120},</span>
+<span class="sd">           {&#39;address&#39;: &#39;GK2zqSsXLA2rwVZk347RYhh6jJpRsCA69FjLW93ZGi3B&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 57499999036109120},</span>
+<span class="sd">           {&#39;address&#39;: &#39;8HVqyX9jebh31Q9Hp8t5sMVJs665979ZeEr3eCfzitUe&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 30301031036109120},</span>
+<span class="sd">           {&#39;address&#39;: &#39;HbZ5FfmKWNHC7uwk6TF1hVi6TCs7dtYfdjEcuPGgzFAg&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 14999999036109120},</span>
+<span class="sd">           {&#39;address&#39;: &#39;14FUT96s9swbmH7ZjpDvfEDywnAYy9zaNhv4xvezySGu&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 4999999036109120},</span>
+<span class="sd">           {&#39;address&#39;: &#39;9huDUZfxoJ7wGMTffUE7vh1xePqef7gyrLJu9NApncqA&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 4999999036109120},</span>
+<span class="sd">           {&#39;address&#39;: &#39;C7C8odR8oashR5Feyrq2tJKaXL18id1dSj2zbkDGL2C2&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 4999999036109120},</span>
+<span class="sd">           {&#39;address&#39;: &#39;AYgECURrvuX6GtFe4tX7aAj87Xc5r5Znx96ntNk1nCv&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;AogcwQ1ubM76EPMhSD5cw1ES4W5econvQCFmBL6nTW1&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;gWgqQ4udVxE3uNxRHEwvftTHwpEmPHAd8JR9UzaHbR2&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;3D91zLQPRLamwJfGR5ZYMKQb4C18gsJNaSdmB6b2wLhw&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;3bHbMa5VW3np5AJazuacidrN4xPZgwhcXigmjwHmBg5e&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;4U3RFq7X5kLG6tZ9kcksFL8oXeGNjtuUN1YfkVKXbs5x&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;5cBVGBKY6kBaiTVmsQpxThJ2oqitBYuCAX9Zm2zMuV4y&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;8PjJTv657aeN9p5R2WoM6pPSz385chvTTytUWaEjSjkq&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;AHB94zKUASftTdqgdfiDSdnPJHkEFp7zX3yMrcSxABsv&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;Hc36Wh1ZqYGzGAnsJWNT9r2gY3h9n89uDpxZPsmEsiE3&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 2499999518054560},</span>
+<span class="sd">           {&#39;address&#39;: &#39;GxyRKP2eVKACaSSnso4VLSAjZKmHsFXHWUfS3A5CtiMA&#39;,</span>
+<span class="sd">            &#39;lamports&#39;: 1940147018054560}]},</span>
+<span class="sd">         &#39;id&#39;: 2}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_largest_accounts_args</span><span class="p">(</span><span class="n">filter_opt</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_leader_schedule"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_leader_schedule">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_leader_schedule</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">epoch</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the leader schedule for an epoch.</span>
+
+<span class="sd">        :param epoch: Fetch the leader schedule for the epoch that corresponds to the provided slot.</span>
+<span class="sd">            If unspecified, the leader schedule for the current epoch is fetched.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_leader_schedule()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;EWj2cuEuVhi7RX81cnAY3TzpyFwnHzzVwvuTyfmxmhs3&#39;: [0,</span>
+<span class="sd">           1,</span>
+<span class="sd">           2,</span>
+<span class="sd">           3,</span>
+<span class="sd">           4,</span>
+<span class="sd">           5,</span>
+<span class="sd">           ...]},</span>
+<span class="sd">         &#39;id&#39;: 6}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_leader_schedule_args</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_minimum_balance_for_rent_exemption"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_minimum_balance_for_rent_exemption">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_minimum_balance_for_rent_exemption</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">usize</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns minimum balance required to make account rent exempt.</span>
+
+<span class="sd">        :param usize: Account data length.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_minimum_balance_for_rent_exemption(50)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: 1238880, &#39;id&#39;: 7}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_minimum_balance_for_rent_exemption_args</span><span class="p">(</span><span class="n">usize</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_multiple_accounts"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_multiple_accounts">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_multiple_accounts</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pubkeys</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">PublicKey</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;base64&quot;</span><span class="p">,</span>
+        <span class="n">data_slice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">DataSliceOpts</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns all the account info for a list of public keys.</span>
+
+<span class="sd">        :param pubkeys: list of Pubkeys to query, as base-58 encoded string or PublicKey object.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+<span class="sd">        :param encoding: (optional) Encoding for Account data, either &quot;base58&quot; (slow), &quot;base64&quot;, or</span>
+<span class="sd">            &quot;jsonParsed&quot;. Default is &quot;base64&quot;.</span>
+
+<span class="sd">            - &quot;base58&quot; is limited to Account data of less than 128 bytes.</span>
+<span class="sd">            - &quot;base64&quot; will return base64 encoded data for Account data of any size.</span>
+<span class="sd">            - &quot;jsonParsed&quot; encoding attempts to use program-specific state parsers to return more human-readable and explicit account state data.</span>
+
+<span class="sd">            If jsonParsed is requested but a parser cannot be found, the field falls back to base64 encoding,</span>
+<span class="sd">            detectable when the data field is type. (jsonParsed encoding is UNSTABLE).</span>
+<span class="sd">        :param data_slice: (optional) Option to limit the returned account data using the provided `offset`: &lt;usize&gt; and</span>
+<span class="sd">            `length`: &lt;usize&gt; fields; only available for &quot;base58&quot; or &quot;base64&quot; encoding.</span>
+
+<span class="sd">        &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; pubkeys = [PublicKey(&quot;6ZWcsUiWJ63awprYmbZgBQSreqYZ4s6opowP4b7boUdh&quot;), PublicKey(&quot;HkcE9sqQAnjJtECiFsqGMNmUho3ptXkapUPAqgZQbBSY&quot;)]</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_multiple_accounts(pubkeys)) # doctest: +SKIP</span>
+<span class="sd">        {</span>
+<span class="sd">            &quot;jsonrpc&quot;: &quot;2.0&quot;,</span>
+<span class="sd">            &quot;result&quot;: {</span>
+<span class="sd">                &quot;context&quot;: {&quot;slot&quot;: 97531946},</span>
+<span class="sd">                &quot;value&quot;: [</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;data&quot;: [&quot;&quot;, &quot;base64&quot;],</span>
+<span class="sd">                        &quot;executable&quot;: False,</span>
+<span class="sd">                        &quot;lamports&quot;: 1,</span>
+<span class="sd">                        &quot;owner&quot;: &quot;11111111111111111111111111111111&quot;,</span>
+<span class="sd">                        &quot;rentEpoch&quot;: 225,</span>
+<span class="sd">                    },</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;data&quot;: [&quot;&quot;, &quot;base64&quot;],</span>
+<span class="sd">                        &quot;executable&quot;: False,</span>
+<span class="sd">                        &quot;lamports&quot;: 809441127,</span>
+<span class="sd">                        &quot;owner&quot;: &quot;11111111111111111111111111111111&quot;,</span>
+<span class="sd">                        &quot;rentEpoch&quot;: 225,</span>
+<span class="sd">                    },</span>
+<span class="sd">                ],</span>
+<span class="sd">            },</span>
+<span class="sd">            &quot;id&quot;: 1,</span>
+<span class="sd">        }</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_multiple_accounts_args</span><span class="p">(</span>
+            <span class="n">pubkeys</span><span class="o">=</span><span class="n">pubkeys</span><span class="p">,</span> <span class="n">commitment</span><span class="o">=</span><span class="n">commitment</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span> <span class="n">data_slice</span><span class="o">=</span><span class="n">data_slice</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_program_accounts"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_program_accounts">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_program_accounts</span><span class="p">(</span>  <span class="c1"># pylint: disable=too-many-arguments</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">PublicKey</span><span class="p">],</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="n">Finalized</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_slice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">DataSliceOpts</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">memcmp_opts</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">MemcmpOpts</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns all accounts owned by the provided program Pubkey.</span>
+
+<span class="sd">        :param pubkey: Pubkey of program, as base-58 encoded string or PublicKey object.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+<span class="sd">        :param encoding: (optional) Encoding for the returned Transaction, either jsonParsed&quot;,</span>
+<span class="sd">            &quot;base58&quot; (slow), or &quot;base64&quot;. If parameter not provided, the default encoding is JSON.</span>
+<span class="sd">        :param data_slice: (optional) Limit the returned account data using the provided `offset`: &lt;usize&gt; and</span>
+<span class="sd">            `length`: &lt;usize&gt; fields; only available for &quot;base58&quot; or &quot;base64&quot; encoding.</span>
+<span class="sd">        :param data_size: (optional) Option to compare the program account data length with the provided data size.</span>
+<span class="sd">        :param memcmp_opts: (optional) Options to compare a provided series of bytes with program account data at a particular offset.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; memcmp_opts = [</span>
+<span class="sd">        ...     types.MemcmpOpts(offset=4, bytes=&quot;3Mc6vR&quot;),</span>
+<span class="sd">        ... ]</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_program_accounts(&quot;4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T&quot;, data_size=17, memcmp_opts=memcmp_opts)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &quot;2.0&quot;,</span>
+<span class="sd">         &#39;result&#39; :[{</span>
+<span class="sd">            &#39;account&#39; :{</span>
+<span class="sd">                 &#39;data&#39; :&#39;2R9jLfiAQ9bgdcw6h8s44439&#39;,</span>
+<span class="sd">                 &#39;executable&#39; :false,</span>
+<span class="sd">                 &#39;lamports&#39; :15298080,</span>
+<span class="sd">                 &#39;owner&#39; :&#39;4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T&#39;,</span>
+<span class="sd">                 &#39;rentEpoch&#39; :28},</span>
+<span class="sd">            &#39;pubkey&#39; :&#39;CxELquR1gPP8wHe33gZ4QxqGB3sZ9RSwsJ2KshVewkFY&#39;}],</span>
+<span class="sd">         &#39;id&#39; :1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_program_accounts_args</span><span class="p">(</span>
+            <span class="n">pubkey</span><span class="o">=</span><span class="n">pubkey</span><span class="p">,</span>
+            <span class="n">commitment</span><span class="o">=</span><span class="n">commitment</span><span class="p">,</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span>
+            <span class="n">data_slice</span><span class="o">=</span><span class="n">data_slice</span><span class="p">,</span>
+            <span class="n">data_size</span><span class="o">=</span><span class="n">data_size</span><span class="p">,</span>
+            <span class="n">memcmp_opts</span><span class="o">=</span><span class="n">memcmp_opts</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_recent_blockhash"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_recent_blockhash">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_recent_blockhash</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns a recent block hash from the ledger.</span>
+
+<span class="sd">        Response also includes a fee schedule that can be used to compute the cost</span>
+<span class="sd">        of submitting a transaction using it.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_recent_blockhash()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 1637},</span>
+<span class="sd">          &#39;value&#39;: {&#39;blockhash&#39;: &#39;EALChog1mXQ9nEgEUQpWAtmA5UueUZvZiL16ZivmR7eb&#39;,</span>
+<span class="sd">           &#39;feeCalculator&#39;: {&#39;lamportsPerSignature&#39;: 5000}}},</span>
+<span class="sd">         &#39;id&#39;: 2}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_recent_blockhash_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_signature_statuses"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_signature_statuses">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_signature_statuses</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">signatures</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]],</span> <span class="n">search_transaction_history</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the statuses of a list of signatures.</span>
+
+<span class="sd">        Unless the ``search_transaction_history`` configuration parameter is included, this method only</span>
+<span class="sd">        searches the recent status cache of signatures, which retains statuses for all active slots plus</span>
+<span class="sd">        ``MAX_RECENT_BLOCKHASHES`` rooted slots.</span>
+
+<span class="sd">        :param signatures: An array of transaction signatures to confirm.</span>
+<span class="sd">        :param search_transaction_history: If true, a Solana node will search its ledger cache for</span>
+<span class="sd">            any signatures not found in the recent status cache.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; signatures = [</span>
+<span class="sd">        ...     &quot;5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW&quot;,</span>
+<span class="sd">        ...     &quot;5j7s6NiJS3JAkvgkoc18WVAsiSaci2pxB2A6ueCJP4tprA2TFg9wSyTLeYouxPBJEMzJinENTkpA52YStRW5Dia7&quot;]</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_signature_statuses(signatures)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {</span>
+<span class="sd">            &#39;context&#39;: {&#39;slot&#39;:82},</span>
+<span class="sd">            &#39;value&#39;: [{</span>
+<span class="sd">                &#39;slot&#39;: 72,</span>
+<span class="sd">                &#39;confirmations&#39;: 10,</span>
+<span class="sd">                &#39;err&#39;: null,</span>
+<span class="sd">                &#39;status&#39;: {&#39;Ok&#39;: null}}, null]},</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_signature_statuses_args</span><span class="p">(</span><span class="n">signatures</span><span class="p">,</span> <span class="n">search_transaction_history</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_slot"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_slot">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_slot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the current slot the node is processing.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_slot()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: 7515, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_slot_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_slot_leader"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_slot_leader">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_slot_leader</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the current slot leader.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_slot_leader()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: &#39;EWj2cuEuVhi7RX81cnAY3TzpyFwnHzzVwvuTyfmxmhs3&#39;,</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_slot_leader_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_stake_activation"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_stake_activation">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_stake_activation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">PublicKey</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">epoch</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns epoch activation information for a stake account.</span>
+
+<span class="sd">        :param pubkey: Pubkey of stake account to query, as base-58 encoded string or PublicKey object.</span>
+<span class="sd">        :param epoch: (optional) Epoch for which to calculate activation details. If parameter not provided,</span>
+<span class="sd">            defaults to current epoch.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_stake_activation()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,&#39;result&#39;: {&#39;active&#39;: 124429280, &#39;inactive&#39;: 73287840, &#39;state&#39;: &#39;activating&#39;}, &#39;id&#39;: 1}}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_stake_activation_args</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">epoch</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_supply"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_supply">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_supply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns information about the current supply.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_supply()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 3846},</span>
+<span class="sd">          &#39;value&#39;: {&#39;circulating&#39;: 683635192454157660,</span>
+<span class="sd">           &#39;nonCirculating&#39;: 316364808037127120,</span>
+<span class="sd">           &#39;nonCirculatingAccounts&#39;: [&#39;ETfDYz7Cg5p9SDFmdpRerjBN5puKK7xydEBZZGM2V4Ay&#39;,</span>
+<span class="sd">            &#39;7cKxv6UznFoWRuJkgw5bWj5rp5PiKTcXZeEaLqyd3Bbm&#39;,</span>
+<span class="sd">            &#39;CV7qh8ZoqeUSTQagosGpkLptXoojf9yCszxkRx1jTD12&#39;,</span>
+<span class="sd">            &#39;FZ9S7X9jMbCaMyJjRfSoBhFyarUMVwvx7HWRe4LnZHsg&#39;,</span>
+<span class="sd">             ...]</span>
+<span class="sd">           &#39;total&#39;: 1000000000491284780}},</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_supply_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_token_account_balance"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_token_account_balance">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_token_account_balance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">PublicKey</span><span class="p">],</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Returns the token balance of an SPL Token account (UNSTABLE).</span>
+
+<span class="sd">        :param pubkey: Pubkey of Token account to query, as base-58 encoded string or PublicKey object.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_token_account_balance(&quot;7fUAJdStEuGbc3sM84cKRL6yYaaSstyLSU4ve5oovLS7&quot;))  # noqa: E501 # pylint: disable=line-too-long # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,&#39;result&#39;: {</span>
+<span class="sd">            &#39;context&#39;: {&#39;slot&#39;:1114},</span>
+<span class="sd">            &#39;value&#39;: {</span>
+<span class="sd">                &#39;uiAmount&#39;: 98.64,</span>
+<span class="sd">                &#39;amount&#39;: &#39;9864&#39;,</span>
+<span class="sd">                &#39;decimals&#39;: 2},</span>
+<span class="sd">         &#39;id&#39; :1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_token_account_balance_args</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_token_accounts_by_delegate"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_token_accounts_by_delegate">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_token_accounts_by_delegate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">delegate</span><span class="p">:</span> <span class="n">PublicKey</span><span class="p">,</span>
+        <span class="n">opts</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">TokenAccountOpts</span><span class="p">,</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns all SPL Token accounts by approved Delegate (UNSTABLE).</span>
+
+<span class="sd">        :param pubkey: Public key of the delegate owner to query.</span>
+<span class="sd">        :param opt: Token account option specifying at least one of `mint` or `program_id`.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_token_accounts_by_delegate_args</span><span class="p">(</span><span class="n">delegate</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_token_accounts</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_token_accounts_by_owner"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_token_accounts_by_owner">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_token_accounts_by_owner</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">owner</span><span class="p">:</span> <span class="n">PublicKey</span><span class="p">,</span>
+        <span class="n">opts</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">TokenAccountOpts</span><span class="p">,</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns all SPL Token accounts by token owner (UNSTABLE).</span>
+
+<span class="sd">        :param pubkey: Public key of the account owner to query.</span>
+<span class="sd">        :param opt: Token account option specifying at least one of `mint` or `program_id`.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_token_accounts_by_owner_args</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_token_accounts</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">__get_token_accounts</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">method</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCMethod</span><span class="p">,</span>
+        <span class="n">pubkey</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">opts</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">TokenAccountOpts</span><span class="p">,</span>
+        <span class="n">commitment</span><span class="p">:</span> <span class="n">Commitment</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_token_accounts_args</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AsyncClient.get_token_largest_accounts"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_token_largest_accounts">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_token_largest_accounts</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">PublicKey</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the 20 largest accounts of a particular SPL Token type.&quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_token_largest_account_args</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_token_supply"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_token_supply">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_token_supply</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">PublicKey</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the total supply of an SPL Token type.&quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_token_supply_args</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_transaction_count"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_transaction_count">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_transaction_count</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the current Transaction count from the ledger.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_transaction_count()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: 4554, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_transaction_count_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_minimum_ledger_slot"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_minimum_ledger_slot">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_minimum_ledger_slot</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the lowest slot that the node has information about in its ledger.</span>
+
+<span class="sd">        This value may increase over time if the node is configured to purge older ledger data.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_minimum_ledger_slot()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: 1234, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_minimum_ledger_slot</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_version"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_version">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Returns the current solana versions running on the node.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_version()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: {&#39;solana-core&#39;: &#39;1.4.0 5332fcad&#39;}, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_version</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.get_vote_accounts"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.get_vote_accounts">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_vote_accounts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Returns the account info and associated stake for all the voting accounts in the current bank.</span>
+
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.get_vote_accounts()) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;current&#39;: [{&#39;activatedStake&#39;: 0,</span>
+<span class="sd">            &#39;commission&#39;: 100,</span>
+<span class="sd">            &#39;epochCredits&#39;: [[165, 714644, 707372],</span>
+<span class="sd">             [166, 722092, 714644],</span>
+<span class="sd">             [167, 730285, 722092],</span>
+<span class="sd">             [168, 738476, 730285],</span>
+<span class="sd">             ...]</span>
+<span class="sd">            &#39;epochVoteAccount&#39;: True,</span>
+<span class="sd">            &#39;lastVote&#39;: 1872294,</span>
+<span class="sd">            &#39;nodePubkey&#39;: &#39;J7v9ndmcoBuo9to2MnHegLnBkC9x3SAVbQBJo5MMJrN1&#39;,</span>
+<span class="sd">            &#39;rootSlot&#39;: 1872263,</span>
+<span class="sd">            &#39;votePubkey&#39;: &#39;HiFjzpR7e5Kv2tdU9jtE4FbH1X8Z9Syia3Uadadx18b5&#39;},</span>
+<span class="sd">           {&#39;activatedStake&#39;: 500029968930560,</span>
+<span class="sd">            &#39;commission&#39;: 100,</span>
+<span class="sd">            &#39;epochCredits&#39;: [[165, 1359689, 1351498],</span>
+<span class="sd">             [166, 1367881, 1359689],</span>
+<span class="sd">             [167, 1376073, 1367881],</span>
+<span class="sd">             [168, 1384265, 1376073],</span>
+<span class="sd">             ...],</span>
+<span class="sd">            &#39;epochVoteAccount&#39;: True,</span>
+<span class="sd">            &#39;lastVote&#39;: 1872295,</span>
+<span class="sd">            &#39;nodePubkey&#39;: &#39;dv1LfzJvDF7S1fBKpFgKoKXK5yoSosmkAdfbxBo1GqJ&#39;,</span>
+<span class="sd">            &#39;rootSlot&#39;: 1872264,</span>
+<span class="sd">            &#39;votePubkey&#39;: &#39;5MMCR4NbTZqjthjLGywmeT66iwE9J9f7kjtxzJjwfUx2&#39;},</span>
+<span class="sd">           {&#39;activatedStake&#39;: 0,</span>
+<span class="sd">            &#39;commission&#39;: 100,</span>
+<span class="sd">            &#39;epochCredits&#39;: [[227, 2751, 0], [228, 7188, 2751]],</span>
+<span class="sd">            &#39;epochVoteAccount&#39;: True,</span>
+<span class="sd">            &#39;lastVote&#39;: 1872295,</span>
+<span class="sd">            &#39;nodePubkey&#39;: &#39;H1wDvJ5HJc1SzhHoWtaycpzQpFbsL7g8peaRV3obKShs&#39;,</span>
+<span class="sd">            &#39;rootSlot&#39;: 1872264,</span>
+<span class="sd">            &#39;votePubkey&#39;: &#39;DPqpgoLQVU3aq72HEqSMsB9qh4KoXc9fGEpvgEuiwnp6&#39;}],</span>
+<span class="sd">          &#39;delinquent&#39;: []},</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_vote_accounts_args</span><span class="p">(</span><span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.request_airdrop"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.request_airdrop">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">request_airdrop</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">pubkey</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">PublicKey</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">lamports</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Requests an airdrop of lamports to a Pubkey.</span>
+
+<span class="sd">        :param pubkey: Pubkey of account to receive lamports, as base-58 encoded string or public key object.</span>
+<span class="sd">        :param lamports: Amount of lamports.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.request_airdrop(PublicKey(1), 10000)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: &#39;uK6gbLbhnTEgjgmwn36D5BRTRkG4AT8r7Q162TLnJzQnHUZVL9r6BYZVfRttrhmkmno6Fp4VQELzL4AiriCo61U&#39;,</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_request_airdrop_args</span><span class="p">(</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">lamports</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.send_raw_transaction"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.send_raw_transaction">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_raw_transaction</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">txn</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bytes</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">opts</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">TxOpts</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">TxOpts</span><span class="p">()</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Send a transaction that has already been signed and serialized into the wire format.</span>
+
+<span class="sd">        :param txn: Fully-signed Transaction object, a fully sign transaction in wire format,</span>
+<span class="sd">            or a fully transaction as base-64 encoded string.</span>
+<span class="sd">        :param opts: (optional) Transaction options.</span>
+
+<span class="sd">        Before submitting, the following preflight checks are performed (unless disabled with the `skip_preflight` option):</span>
+
+<span class="sd">            - The transaction signatures are verified.</span>
+
+<span class="sd">            - The transaction is simulated against the latest max confirmed bank and on failure an error</span>
+<span class="sd">                will be returned. Preflight checks may be disabled if desired.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; full_signed_tx_str = (</span>
+<span class="sd">        ...     &quot;AbN5XM+qw+7oOLsFw7goQSLBis7c1kXJFP6OF4w7YmQNhhbQYcyBiybKuOzzhV7McvoRP3Mey9AhXojtwDCdbwoBAAEDE5j2&quot;</span>
+<span class="sd">        ...     &quot;LG0aRXxRumpLXz29L2n8qTIWIY3ImX5Ba9F9k8poq0Z3/7HyiU3QphU8Ix1F7ENq5TrmAUnb4V8y5LhwPwAAAAAAAAAAAAAA&quot;</span>
+<span class="sd">        ...     &quot;AAAAAAAAAAAAAAAAAAAAAAAAAAAAg5YY9wG6fpuieuWYJd1ta7ZtFPbV0OriFRYdcYUaEGkBAgIAAQwCAAAAQEIPAAAAAAA=&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.send_raw_transaction(full_signed_tx_str))  # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: &#39;CMwyESM2NE74mghfbvsHJDERF7xMYKshwwm6VgH6GFqXzx8LfBFuP5ruccumfhTguha6seUHPpiHzzHUQXzq2kN&#39;,</span>
+<span class="sd">         &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_raw_transaction_args</span><span class="p">(</span><span class="n">txn</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+
+        <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">opts</span><span class="o">.</span><span class="n">skip_confirmation</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_send</span><span class="p">(</span><span class="n">resp</span><span class="p">)</span>
+        <span class="n">post_send_args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_raw_transaction_post_send_args</span><span class="p">(</span><span class="n">resp</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">__post_send_with_confirm</span><span class="p">(</span><span class="o">*</span><span class="n">post_send_args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.send_transaction"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.send_transaction">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_transaction</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">txn</span><span class="p">:</span> <span class="n">Transaction</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">signers</span><span class="p">:</span> <span class="n">Keypair</span><span class="p">,</span>
+        <span class="n">opts</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">TxOpts</span> <span class="o">=</span> <span class="n">types</span><span class="o">.</span><span class="n">TxOpts</span><span class="p">(),</span>
+        <span class="n">recent_blockhash</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Blockhash</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Send a transaction.</span>
+
+<span class="sd">        :param txn: Transaction object.</span>
+<span class="sd">        :param signers: Signers to sign the transaction.</span>
+<span class="sd">        :param opts: (optional) Transaction options.</span>
+<span class="sd">        :param recent_blockhash: (optional) Pass a valid recent blockhash here if you want to</span>
+<span class="sd">            skip fetching the recent blockhash or relying on the cache.</span>
+
+<span class="sd">        &gt;&gt;&gt; from solana.keypair import Keypair</span>
+<span class="sd">        &gt;&gt;&gt; from solana.system_program import TransferParams, transfer</span>
+<span class="sd">        &gt;&gt;&gt; from solana.transaction import Transaction</span>
+<span class="sd">        &gt;&gt;&gt; sender, receiver = Keypair.from_seed(bytes(PublicKey(1))), Keypair.from_seed(bytes(PublicKey(2)))</span>
+<span class="sd">        &gt;&gt;&gt; txn = Transaction().add(transfer(TransferParams(</span>
+<span class="sd">        ...     from_pubkey=sender.public_key, to_pubkey=receiver.public_key, lamports=1000)))</span>
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.send_transaction(txn, sender)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: &#39;236zSA5w4NaVuLXXHK1mqiBuBxkNBu84X6cfLBh1v6zjPrLfyECz4zdedofBaZFhs4gdwzSmij9VkaSo2tR5LTgG&#39;,</span>
+<span class="sd">         &#39;id&#39;: 12}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">recent_blockhash</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">blockhash_cache</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">recent_blockhash</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">blockhash_cache</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                    <span class="n">blockhash_resp</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_recent_blockhash</span><span class="p">(</span><span class="n">Finalized</span><span class="p">)</span>
+                    <span class="n">recent_blockhash</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_blockhash_resp</span><span class="p">(</span><span class="n">blockhash_resp</span><span class="p">,</span> <span class="n">used_immediately</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">blockhash_resp</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_recent_blockhash</span><span class="p">(</span><span class="n">Finalized</span><span class="p">)</span>
+                <span class="n">recent_blockhash</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parse_recent_blockhash</span><span class="p">(</span><span class="n">blockhash_resp</span><span class="p">)</span>
+        <span class="n">txn</span><span class="o">.</span><span class="n">recent_blockhash</span> <span class="o">=</span> <span class="n">recent_blockhash</span>
+
+        <span class="n">txn</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="o">*</span><span class="n">signers</span><span class="p">)</span>
+        <span class="n">txn_resp</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_raw_transaction</span><span class="p">(</span><span class="n">txn</span><span class="o">.</span><span class="n">serialize</span><span class="p">(),</span> <span class="n">opts</span><span class="o">=</span><span class="n">opts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">blockhash_cache</span><span class="p">:</span>
+            <span class="n">blockhash_resp</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_recent_blockhash</span><span class="p">(</span><span class="n">Finalized</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_process_blockhash_resp</span><span class="p">(</span><span class="n">blockhash_resp</span><span class="p">,</span> <span class="n">used_immediately</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">txn_resp</span></div>
+
+<div class="viewcode-block" id="AsyncClient.simulate_transaction"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.simulate_transaction">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">simulate_transaction</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">txn</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bytes</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Transaction</span><span class="p">],</span> <span class="n">sig_verify</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Commitment</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Simulate sending a transaction.</span>
+
+<span class="sd">        :param txn: A Transaction object, a transaction in wire format, or a transaction as base-64 encoded string</span>
+<span class="sd">            The transaction must have a valid blockhash, but is not required to be signed.</span>
+<span class="sd">        :param signer_verify: If true the transaction signatures will be verified (default: false).</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; tx_str = (</span>
+<span class="sd">        ...     &quot;4hXTCkRzt9WyecNzV1XPgCDfGAZzQKNxLXgynz5QDuWWPSAZBZSHptvWRL3BjCvzUXRdKvHL2b7yGrRQcWyaqsaBCncVG7BF&quot;</span>
+<span class="sd">        ...     &quot;ggS8w9snUts67BSh3EqKpXLUm5UMHfD7ZBe9GhARjbNQMLJ1QD3Spr6oMTBU6EhdB4RD8CP2xUxr2u3d6fos36PD98XS6oX8&quot;</span>
+<span class="sd">        ...     &quot;TQjLpsMwncs5DAMiD4nNnR8NBfyghGCWvCVifVwvA8B8TJxE1aiyiv2L429BCWfyzAme5sZW8rDb14NeCQHhZbtNqfXhcp2t&quot;</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.simulate_transaction(tx_str))  # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39; :&#39;2.0&#39;,</span>
+<span class="sd">         &#39;result&#39;: {&#39;context&#39;: {&#39;slot&#39;: 218},</span>
+<span class="sd">         &#39;value&#39;: {</span>
+<span class="sd">             &#39;err&#39;: null,</span>
+<span class="sd">             &#39;logs&#39;: [&#39;BPF program 83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri success&#39;]},</span>
+<span class="sd">         &#39;id&#39;:1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_simulate_transaction_args</span><span class="p">(</span><span class="n">txn</span><span class="p">,</span> <span class="n">sig_verify</span><span class="p">,</span> <span class="n">commitment</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.set_log_filter"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.set_log_filter">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">set_log_filter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">log_filter</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Sets the log filter on the validator.</span>
+
+<span class="sd">        :param log_filter: The new log filter to use.</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; asyncio.run(solana_client.set_log_filter(&quot;solana_core=debug&quot;)) # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: None, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_log_filter_args</span><span class="p">(</span><span class="n">log_filter</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="AsyncClient.validator_exit"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.validator_exit">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">validator_exit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Request to have the validator exit.</span>
+
+<span class="sd">        Validator must have booted with RPC exit enabled (`--enable-rpc-exit` parameter).</span>
+
+<span class="sd">        &gt;&gt;&gt; solana_client = AsyncClient(&quot;http://localhost:8899&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; solana_client.validator_exit() # doctest: +SKIP</span>
+<span class="sd">        {&#39;jsonrpc&#39;: &#39;2.0&#39;, &#39;result&#39;: true, &#39;id&#39;: 1}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">make_request</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_validator_exit</span><span class="p">)</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">__post_send_with_confirm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resp</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">,</span> <span class="n">conf_comm</span><span class="p">:</span> <span class="n">Commitment</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="n">resp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_send</span><span class="p">(</span><span class="n">resp</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Transaction sent to </span><span class="si">%s</span><span class="s2">. Signature </span><span class="si">%s</span><span class="s2">: &quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">endpoint_uri</span><span class="p">,</span> <span class="n">resp</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">confirm_transaction</span><span class="p">(</span><span class="n">resp</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">],</span> <span class="n">conf_comm</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">resp</span>
+
+<div class="viewcode-block" id="AsyncClient.confirm_transaction"><a class="viewcode-back" href="../../../api.html#solana.rpc.async_api.AsyncClient.confirm_transaction">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">confirm_transaction</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tx_sig</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">commitment</span><span class="p">:</span> <span class="n">Commitment</span> <span class="o">=</span> <span class="n">Finalized</span><span class="p">,</span> <span class="n">sleep_seconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">RPCResponse</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Confirm the transaction identified by the specified signature.</span>
+
+<span class="sd">        :param tx_sig: the transaction signature to confirm.</span>
+<span class="sd">        :param commitment: Bank state to query. It can be either &quot;finalized&quot;, &quot;confirmed&quot; or &quot;processed&quot;.</span>
+<span class="sd">        :param sleep_seconds: The number of seconds to sleep when polling the signature status.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="mi">30</span>
+        <span class="k">while</span> <span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">timeout</span><span class="p">:</span>
+            <span class="n">resp</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_signature_statuses</span><span class="p">([</span><span class="n">tx_sig</span><span class="p">])</span>
+            <span class="n">maybe_rpc_error</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">maybe_rpc_error</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">RPCException</span><span class="p">(</span><span class="n">maybe_rpc_error</span><span class="p">)</span>
+            <span class="n">resp_value</span> <span class="o">=</span> <span class="n">resp</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">][</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">resp_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">confirmation_status</span> <span class="o">=</span> <span class="n">resp_value</span><span class="p">[</span><span class="s2">&quot;confirmationStatus&quot;</span><span class="p">]</span>
+                <span class="n">confirmation_rank</span> <span class="o">=</span> <span class="n">COMMITMENT_RANKS</span><span class="p">[</span><span class="n">confirmation_status</span><span class="p">]</span>
+                <span class="n">commitment_rank</span> <span class="o">=</span> <span class="n">COMMITMENT_RANKS</span><span class="p">[</span><span class="n">commitment</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">confirmation_rank</span> <span class="o">&gt;=</span> <span class="n">commitment_rank</span><span class="p">:</span>
+                    <span class="k">break</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">sleep_seconds</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">maybe_rpc_error</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">maybe_rpc_error</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">RPCException</span><span class="p">(</span><span class="n">maybe_rpc_error</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">UnconfirmedTxError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unable to confirm transaction </span><span class="si">{</span><span class="n">tx_sig</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">resp</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, Michael Huang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>solana.system_program &mdash; solana.py  documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> solana.py
+          </a>
+              <div class="version">
+                0.19.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../solana.html">Solana</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.async_api">Async API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.websocket_api">Websockets Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.commitment">Commitment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.types">RPC Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.providers.base">RPC Providers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../spl.html">Solana Program Library (SPL)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">solana.py</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>solana.system_program</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for solana.system_program</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Library to interface with the system program.&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">from</span> <span class="nn">solana</span> <span class="kn">import</span> <span class="n">sysvar</span>
+<span class="kn">from</span> <span class="nn">solana._layouts.system_instructions</span> <span class="kn">import</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="p">,</span> <span class="n">InstructionType</span>
+<span class="kn">from</span> <span class="nn">solana.publickey</span> <span class="kn">import</span> <span class="n">PublicKey</span>
+<span class="kn">from</span> <span class="nn">solana.transaction</span> <span class="kn">import</span> <span class="n">AccountMeta</span><span class="p">,</span> <span class="n">Transaction</span><span class="p">,</span> <span class="n">TransactionInstruction</span>
+<span class="kn">from</span> <span class="nn">solana.utils.validate</span> <span class="kn">import</span> <span class="n">validate_instruction_keys</span><span class="p">,</span> <span class="n">validate_instruction_type</span>
+
+<span class="n">SYS_PROGRAM_ID</span> <span class="o">=</span> <span class="n">PublicKey</span><span class="p">(</span><span class="s2">&quot;11111111111111111111111111111111&quot;</span><span class="p">)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Public key that identifies the System program,</span>
+<span class="sd">also the Python equivalent of `Pubkey::default()`.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="c1"># Instruction Params</span>
+<div class="viewcode-block" id="CreateAccountParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.CreateAccountParams">[docs]</a><span class="k">class</span> <span class="nc">CreateAccountParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create account system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">from_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">new_account_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">lamports</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">space</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">program_id</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="TransferParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.TransferParams">[docs]</a><span class="k">class</span> <span class="nc">TransferParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Transfer system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">from_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">to_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">lamports</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="AssignParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.AssignParams">[docs]</a><span class="k">class</span> <span class="nc">AssignParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Assign system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">account_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">program_id</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="CreateAccountWithSeedParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.CreateAccountWithSeedParams">[docs]</a><span class="k">class</span> <span class="nc">CreateAccountWithSeedParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create account with seed system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">from_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">new_account_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">base_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">lamports</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">space</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">program_id</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="CreateNonceAccountParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.CreateNonceAccountParams">[docs]</a><span class="k">class</span> <span class="nc">CreateNonceAccountParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create nonce account system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">from_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">nonce_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">authorized_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">lamports</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="CreateNonceAccountWithSeedParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.CreateNonceAccountWithSeedParams">[docs]</a><span class="k">class</span> <span class="nc">CreateNonceAccountWithSeedParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create nonce account with seed system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">from_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">nonce_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">authorized_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">lamports</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">base_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="InitializeNonceParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.InitializeNonceParams">[docs]</a><span class="k">class</span> <span class="nc">InitializeNonceParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Initialize nonce account system instruction params.&quot;&quot;&quot;</span>
+
+    <span class="n">nonce_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">authorized_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="AdvanceNonceParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.AdvanceNonceParams">[docs]</a><span class="k">class</span> <span class="nc">AdvanceNonceParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Advance nonce account system instruction params.&quot;&quot;&quot;</span>
+
+    <span class="n">nonce_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">authorized_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="WithdrawNonceParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.WithdrawNonceParams">[docs]</a><span class="k">class</span> <span class="nc">WithdrawNonceParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Withdraw nonce account system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">nonce_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">authorized_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">to_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">lamports</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="AuthorizeNonceParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.AuthorizeNonceParams">[docs]</a><span class="k">class</span> <span class="nc">AuthorizeNonceParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Authorize nonce account system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">nonce_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">authorized_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">new_authorized_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="AllocateParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.AllocateParams">[docs]</a><span class="k">class</span> <span class="nc">AllocateParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Allocate account with seed system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">account_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">space</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="AllocateWithSeedParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.AllocateWithSeedParams">[docs]</a><span class="k">class</span> <span class="nc">AllocateWithSeedParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Allocate account with seed system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">account_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">base_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">space</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">program_id</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="AssignWithSeedParams"><a class="viewcode-back" href="../../solana.html#solana.system_program.AssignWithSeedParams">[docs]</a><span class="k">class</span> <span class="nc">AssignWithSeedParams</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Assign account with seed system transaction params.&quot;&quot;&quot;</span>
+
+    <span class="n">account_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">base_pubkey</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span>
+    <span class="n">program_id</span><span class="p">:</span> <span class="n">PublicKey</span>
+    <span class="sd">&quot;&quot;&quot;&quot;&quot;&quot;</span></div>
+
+
+<span class="k">def</span> <span class="nf">__check_program_id</span><span class="p">(</span><span class="n">program_id</span><span class="p">:</span> <span class="n">PublicKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">program_id</span> <span class="o">!=</span> <span class="n">SYS_PROGRAM_ID</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;invalid instruction: programId is not SystemProgram&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">__parse_and_validate_instruction</span><span class="p">(</span>
+    <span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">,</span>
+    <span class="n">expected_keys</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">expected_type</span><span class="p">:</span> <span class="n">InstructionType</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>  <span class="c1"># Returns a Construct container.</span>
+    <span class="n">validate_instruction_keys</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="n">expected_keys</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">instruction</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">validate_instruction_type</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">expected_type</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<div class="viewcode-block" id="decode_create_account"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_create_account">[docs]</a><span class="k">def</span> <span class="nf">decode_create_account</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CreateAccountParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode a create account system instruction and retrieve the instruction params.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; from_account, new_account, program_id = PublicKey(1), PublicKey(2), PublicKey(3)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = create_account(</span>
+<span class="sd">    ...     CreateAccountParams(</span>
+<span class="sd">    ...         from_pubkey=from_account, new_account_pubkey=new_account,</span>
+<span class="sd">    ...         lamports=1, space=1, program_id=program_id)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; decode_create_account(instruction)</span>
+<span class="sd">    CreateAccountParams(from_pubkey=11111111111111111111111111111112, new_account_pubkey=11111111111111111111111111111113, lamports=1, space=1, program_id=11111111111111111111111111111114)</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501 # pylint: disable=line-too-long</span>
+    <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">__parse_and_validate_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">InstructionType</span><span class="o">.</span><span class="n">CREATE_ACCOUNT</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">CreateAccountParams</span><span class="p">(</span>
+        <span class="n">from_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span>
+        <span class="n">new_account_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span>
+        <span class="n">lamports</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">lamports</span><span class="p">,</span>
+        <span class="n">space</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">space</span><span class="p">,</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">PublicKey</span><span class="p">(</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">program_id</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_transfer"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_transfer">[docs]</a><span class="k">def</span> <span class="nf">decode_transfer</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransferParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode a transfer system instruction and retrieve the instruction params.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; sender, receiver = PublicKey(1), PublicKey(2)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = transfer(</span>
+<span class="sd">    ...     TransferParams(from_pubkey=sender, to_pubkey=receiver, lamports=1000)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; decode_transfer(instruction)</span>
+<span class="sd">    TransferParams(from_pubkey=11111111111111111111111111111112, to_pubkey=11111111111111111111111111111113, lamports=1000)</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># pylint: disable=line-too-long # noqa: E501</span>
+    <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">__parse_and_validate_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">InstructionType</span><span class="o">.</span><span class="n">TRANSFER</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">TransferParams</span><span class="p">(</span>
+        <span class="n">from_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">to_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">lamports</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">lamports</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_allocate"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_allocate">[docs]</a><span class="k">def</span> <span class="nf">decode_allocate</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AllocateParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode an allocate system instruction and retrieve the instruction params.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; allocator = PublicKey(1)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = allocate(</span>
+<span class="sd">    ...     AllocateParams(account_pubkey=allocator,space=65537)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; decode_allocate(instruction)</span>
+<span class="sd">    AllocateParams(account_pubkey=11111111111111111111111111111112, space=65537)</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># pylint: disable=line-too-long # noqa: E501</span>
+    <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">__parse_and_validate_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">InstructionType</span><span class="o">.</span><span class="n">ALLOCATE</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">AllocateParams</span><span class="p">(</span><span class="n">account_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">space</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_allocate_with_seed"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_allocate_with_seed">[docs]</a><span class="k">def</span> <span class="nf">decode_allocate_with_seed</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AllocateWithSeedParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode an allocate with seed system instruction and retrieve the instruction params.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; allocator, base, program_id = PublicKey(1), PublicKey(2), PublicKey(3)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = allocate(</span>
+<span class="sd">    ...     AllocateWithSeedParams(</span>
+<span class="sd">    ...         account_pubkey=allocator,</span>
+<span class="sd">    ...         base_pubkey=base,</span>
+<span class="sd">    ...         seed={&quot;length&quot;: 4, &quot;chars&quot;: &quot;gqln&quot;},</span>
+<span class="sd">    ...         space=65537,</span>
+<span class="sd">    ...         program_id=program_id</span>
+<span class="sd">    ...     )</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; decode_allocate_with_seed(instruction)</span>
+<span class="sd">    AllocateWithSeedParams(account_pubkey=11111111111111111111111111111112, base_pubkey=11111111111111111111111111111113, seed=Container(length=4, chars=u&#39;gqln&#39;), space=65537, program_id=11111111111111111111111111111114)</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># pylint: disable=line-too-long # noqa: E501</span>
+    <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">__parse_and_validate_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">InstructionType</span><span class="o">.</span><span class="n">ALLOCATE_WITH_SEED</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">AllocateWithSeedParams</span><span class="p">(</span>
+        <span class="n">account_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span>
+        <span class="n">base_pubkey</span><span class="o">=</span><span class="n">PublicKey</span><span class="p">(</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">base</span><span class="p">),</span>
+        <span class="n">seed</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+        <span class="n">space</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">space</span><span class="p">,</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">PublicKey</span><span class="p">(</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">program_id</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_assign"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_assign">[docs]</a><span class="k">def</span> <span class="nf">decode_assign</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AssignParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode an assign system instruction and retrieve the instruction params.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; account, program_id = PublicKey(1), PublicKey(2)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = assign(</span>
+<span class="sd">    ...     AssignParams(account_pubkey=account, program_id=program_id)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; decode_assign(instruction)</span>
+<span class="sd">    AssignParams(account_pubkey=11111111111111111111111111111112, program_id=11111111111111111111111111111113)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">__parse_and_validate_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">InstructionType</span><span class="o">.</span><span class="n">ASSIGN</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">AssignParams</span><span class="p">(</span><span class="n">account_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span> <span class="n">program_id</span><span class="o">=</span><span class="n">PublicKey</span><span class="p">(</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">program_id</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="decode_assign_with_seed"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_assign_with_seed">[docs]</a><span class="k">def</span> <span class="nf">decode_assign_with_seed</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AssignWithSeedParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode an assign system with seed instruction and retrieve the instruction params.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;decode_assign_with_seed not implemented&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_create_account_with_seed"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_create_account_with_seed">[docs]</a><span class="k">def</span> <span class="nf">decode_create_account_with_seed</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CreateAccountWithSeedParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode a create account with seed system instruction and retrieve the instruction params.&quot;&quot;&quot;</span>
+    <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">__parse_and_validate_instruction</span><span class="p">(</span><span class="n">instruction</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">InstructionType</span><span class="o">.</span><span class="n">CREATE_ACCOUNT_WITH_SEED</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">CreateAccountWithSeedParams</span><span class="p">(</span>
+        <span class="n">from_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span>
+        <span class="n">new_account_pubkey</span><span class="o">=</span><span class="n">instruction</span><span class="o">.</span><span class="n">keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pubkey</span><span class="p">,</span>
+        <span class="n">base_pubkey</span><span class="o">=</span><span class="n">PublicKey</span><span class="p">(</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">base</span><span class="p">),</span>
+        <span class="n">seed</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+        <span class="n">lamports</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">lamports</span><span class="p">,</span>
+        <span class="n">space</span><span class="o">=</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">space</span><span class="p">,</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">PublicKey</span><span class="p">(</span><span class="n">parsed_data</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">program_id</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_nonce_initialize"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_nonce_initialize">[docs]</a><span class="k">def</span> <span class="nf">decode_nonce_initialize</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">InitializeNonceParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode a nonce initialize system instruction and retrieve the instruction params.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;decode_nonce_initialize not implemented&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_nonce_advance"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_nonce_advance">[docs]</a><span class="k">def</span> <span class="nf">decode_nonce_advance</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AdvanceNonceParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode a nonce advance system instruction and retrieve the instruction params.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;decode_nonce_advance not implemented&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_nonce_withdraw"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_nonce_withdraw">[docs]</a><span class="k">def</span> <span class="nf">decode_nonce_withdraw</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">WithdrawNonceParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode a nonce withdraw system instruction and retrieve the instruction params.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;decode_nonce_withdraw not implemented&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="decode_nonce_authorize"><a class="viewcode-back" href="../../solana.html#solana.system_program.decode_nonce_authorize">[docs]</a><span class="k">def</span> <span class="nf">decode_nonce_authorize</span><span class="p">(</span><span class="n">instruction</span><span class="p">:</span> <span class="n">TransactionInstruction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AuthorizeNonceParams</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Decode a nonce authorize system instruction and retrieve the instruction params.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;decode_nonce_authorize not implemented&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="create_account"><a class="viewcode-back" href="../../solana.html#solana.system_program.create_account">[docs]</a><span class="k">def</span> <span class="nf">create_account</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">CreateAccountParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction that creates a new account.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; from_account, new_account, program_id = PublicKey(1), PublicKey(2), PublicKey(3)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = create_account(</span>
+<span class="sd">    ...     CreateAccountParams(</span>
+<span class="sd">    ...         from_pubkey=from_account, new_account_pubkey=new_account,</span>
+<span class="sd">    ...         lamports=1, space=1, program_id=program_id)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; type(instruction)</span>
+<span class="sd">    &lt;class &#39;solana.transaction.TransactionInstruction&#39;&gt;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">CREATE_ACCOUNT</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">lamports</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">lamports</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="n">program_id</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">program_id</span><span class="p">)),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">TransactionInstruction</span><span class="p">(</span>
+        <span class="n">keys</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">from_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">new_account_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="assign"><a class="viewcode-back" href="../../solana.html#solana.system_program.assign">[docs]</a><span class="k">def</span> <span class="nf">assign</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">AssignParams</span><span class="p">,</span> <span class="n">AssignWithSeedParams</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction that assigns an account to a program.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; account, program_id = PublicKey(1), PublicKey(2)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = assign(</span>
+<span class="sd">    ...     AssignParams(account_pubkey=account, program_id=program_id)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; type(instruction)</span>
+<span class="sd">    &lt;class &#39;solana.transaction.TransactionInstruction&#39;&gt;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">AssignWithSeedParams</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;assign with key is not implemented&quot;</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="p">(</span><span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">ASSIGN</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">program_id</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">program_id</span><span class="p">)))</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">TransactionInstruction</span><span class="p">(</span>
+        <span class="n">keys</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">account_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="transfer"><a class="viewcode-back" href="../../solana.html#solana.system_program.transfer">[docs]</a><span class="k">def</span> <span class="nf">transfer</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">TransferParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction that transfers lamports from one account to another.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; sender, receiver = PublicKey(1), PublicKey(2)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = transfer(</span>
+<span class="sd">    ...     TransferParams(from_pubkey=sender, to_pubkey=receiver, lamports=1000)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; type(instruction)</span>
+<span class="sd">    &lt;class &#39;solana.transaction.TransactionInstruction&#39;&gt;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="p">(</span><span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">TRANSFER</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">lamports</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">lamports</span><span class="p">))</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">TransactionInstruction</span><span class="p">(</span>
+        <span class="n">keys</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">from_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">to_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="create_account_with_seed"><a class="viewcode-back" href="../../solana.html#solana.system_program.create_account_with_seed">[docs]</a><span class="k">def</span> <span class="nf">create_account_with_seed</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">CreateAccountWithSeedParams</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate a instruction that creates a new account at an address generated with `from`, a seed, and programId.&quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">CREATE_ACCOUNT_WITH_SEED</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">base</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">base_pubkey</span><span class="p">),</span>
+                <span class="n">seed</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+                <span class="n">lamports</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">lamports</span><span class="p">,</span>
+                <span class="n">space</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">space</span><span class="p">,</span>
+                <span class="n">program_id</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">program_id</span><span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">from_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">new_account_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+    <span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">params</span><span class="o">.</span><span class="n">base_pubkey</span> <span class="o">!=</span> <span class="n">params</span><span class="o">.</span><span class="n">from_pubkey</span><span class="p">:</span>
+        <span class="n">keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">base_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">TransactionInstruction</span><span class="p">(</span><span class="n">keys</span><span class="o">=</span><span class="n">keys</span><span class="p">,</span> <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="create_nonce_account"><a class="viewcode-back" href="../../solana.html#solana.system_program.create_nonce_account">[docs]</a><span class="k">def</span> <span class="nf">create_nonce_account</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">CreateNonceAccountParams</span><span class="p">,</span> <span class="n">CreateNonceAccountWithSeedParams</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Transaction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate a Transaction that creates a new Nonce account.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">CreateNonceAccountParams</span><span class="p">):</span>
+        <span class="n">create_account_instruction</span> <span class="o">=</span> <span class="n">create_account</span><span class="p">(</span>
+            <span class="n">CreateAccountParams</span><span class="p">(</span>
+                <span class="n">from_pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">from_pubkey</span><span class="p">,</span>
+                <span class="n">new_account_pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">nonce_pubkey</span><span class="p">,</span>
+                <span class="n">lamports</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">lamports</span><span class="p">,</span>
+                <span class="n">space</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span>  <span class="c1"># derived from rust implementation</span>
+                <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">create_account_instruction</span> <span class="o">=</span> <span class="n">create_account_with_seed</span><span class="p">(</span>
+            <span class="n">CreateAccountWithSeedParams</span><span class="p">(</span>
+                <span class="n">from_pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">from_pubkey</span><span class="p">,</span>
+                <span class="n">new_account_pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">nonce_pubkey</span><span class="p">,</span>
+                <span class="n">base_pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">base_pubkey</span><span class="p">,</span>
+                <span class="n">seed</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+                <span class="n">lamports</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">lamports</span><span class="p">,</span>
+                <span class="n">space</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span>  <span class="c1"># derived from rust implementation</span>
+                <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="n">initialize_nonce_instruction</span> <span class="o">=</span> <span class="n">nonce_initialization</span><span class="p">(</span>
+        <span class="n">InitializeNonceParams</span><span class="p">(</span>
+            <span class="n">nonce_pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">nonce_pubkey</span><span class="p">,</span>
+            <span class="n">authorized_pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">authorized_pubkey</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Transaction</span><span class="p">(</span><span class="n">fee_payer</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">from_pubkey</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">create_account_instruction</span><span class="p">,</span> <span class="n">initialize_nonce_instruction</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="nonce_initialization"><a class="viewcode-back" href="../../solana.html#solana.system_program.nonce_initialization">[docs]</a><span class="k">def</span> <span class="nf">nonce_initialization</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">InitializeNonceParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction to initialize a Nonce account.&quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">INITIALIZE_NONCE_ACCOUNT</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">authorized</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">authorized_pubkey</span><span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">TransactionInstruction</span><span class="p">(</span>
+        <span class="n">keys</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">nonce_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">sysvar</span><span class="o">.</span><span class="n">SYSVAR_RECENT_BLOCKHASHES_PUBKEY</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">sysvar</span><span class="o">.</span><span class="n">SYSVAR_RENT_PUBKEY</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="nonce_advance"><a class="viewcode-back" href="../../solana.html#solana.system_program.nonce_advance">[docs]</a><span class="k">def</span> <span class="nf">nonce_advance</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">AdvanceNonceParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction to advance the nonce in a Nonce account.&quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">ADVANCE_NONCE_ACCOUNT</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">=</span><span class="p">{},</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">TransactionInstruction</span><span class="p">(</span>
+        <span class="n">keys</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">nonce_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">sysvar</span><span class="o">.</span><span class="n">SYSVAR_RECENT_BLOCKHASHES_PUBKEY</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">authorized_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="nonce_withdraw"><a class="viewcode-back" href="../../solana.html#solana.system_program.nonce_withdraw">[docs]</a><span class="k">def</span> <span class="nf">nonce_withdraw</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">WithdrawNonceParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction that withdraws lamports from a Nonce account.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;nonce_withdraw not implemented&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="nonce_authorize"><a class="viewcode-back" href="../../solana.html#solana.system_program.nonce_authorize">[docs]</a><span class="k">def</span> <span class="nf">nonce_authorize</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">AuthorizeNonceParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction that authorizes a new PublicKey as the authority on a Nonce account.&quot;&quot;&quot;</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;nonce_authorize not implemented&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="allocate"><a class="viewcode-back" href="../../solana.html#solana.system_program.allocate">[docs]</a><span class="k">def</span> <span class="nf">allocate</span><span class="p">(</span><span class="n">params</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">AllocateParams</span><span class="p">,</span> <span class="n">AllocateWithSeedParams</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">TransactionInstruction</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Generate an instruction that allocates space in an account without funding.</span>
+
+<span class="sd">    &gt;&gt;&gt; from solana.publickey import PublicKey</span>
+<span class="sd">    &gt;&gt;&gt; allocator = PublicKey(1)</span>
+<span class="sd">    &gt;&gt;&gt; instruction = allocate(</span>
+<span class="sd">    ...     AllocateParams(account_pubkey=allocator, space=65537)</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; type(instruction)</span>
+<span class="sd">    &lt;class &#39;solana.transaction.TransactionInstruction&#39;&gt;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">AllocateWithSeedParams</span><span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+            <span class="nb">dict</span><span class="p">(</span>
+                <span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">ALLOCATE_WITH_SEED</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
+                    <span class="n">base</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">base_pubkey</span><span class="p">),</span>
+                    <span class="n">seed</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+                    <span class="n">space</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">space</span><span class="p">,</span>
+                    <span class="n">program_id</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">program_id</span><span class="p">),</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">SYSTEM_INSTRUCTIONS_LAYOUT</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+            <span class="nb">dict</span><span class="p">(</span><span class="n">instruction_type</span><span class="o">=</span><span class="n">InstructionType</span><span class="o">.</span><span class="n">ALLOCATE</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">space</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">space</span><span class="p">))</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">TransactionInstruction</span><span class="p">(</span>
+        <span class="n">keys</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">AccountMeta</span><span class="p">(</span><span class="n">pubkey</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">account_pubkey</span><span class="p">,</span> <span class="n">is_signer</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_writable</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">program_id</span><span class="o">=</span><span class="n">SYS_PROGRAM_ID</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+    <span class="p">)</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, Michael Huang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

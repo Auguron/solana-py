@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>solana.keypair &mdash; solana.py  documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> solana.py
+          </a>
+              <div class="version">
+                0.19.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../solana.html">Solana</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.async_api">Async API Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.websocket_api">Websockets Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.commitment">Commitment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.types">RPC Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html#module-solana.rpc.providers.base">RPC Providers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../spl.html">Solana Program Library (SPL)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">solana.py</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>solana.keypair</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for solana.keypair</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Keypair module to manage public-private key pair.&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">import</span> <span class="nn">nacl.public</span>  <span class="c1"># type: ignore</span>
+<span class="kn">from</span> <span class="nn">nacl</span> <span class="kn">import</span> <span class="n">signing</span>  <span class="c1"># type: ignore</span>
+
+<span class="kn">import</span> <span class="nn">solana.publickey</span>
+
+
+<div class="viewcode-block" id="Keypair"><a class="viewcode-back" href="../../solana.html#solana.keypair.Keypair">[docs]</a><span class="k">class</span> <span class="nc">Keypair</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;An account keypair used for signing transactions.</span>
+
+<span class="sd">    :param keypair: an nacl.public.PrivateKey instance.</span>
+
+<span class="sd">    Init with random keypair:</span>
+
+<span class="sd">    &gt;&gt;&gt; keypair = Keypair()</span>
+
+<span class="sd">    Init with existing keypair:</span>
+
+<span class="sd">    &gt;&gt;&gt; keys = nacl.public.PrivateKey.generate()</span>
+<span class="sd">    &gt;&gt;&gt; keypair = Keypair(keys)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keypair</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">nacl</span><span class="o">.</span><span class="n">public</span><span class="o">.</span><span class="n">PrivateKey</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Create a new keypair instance. Generate random keypair if no keypair is provided.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">keypair</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># the PrivateKey object comes with a public key too</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_keypair</span> <span class="o">=</span> <span class="n">nacl</span><span class="o">.</span><span class="n">public</span><span class="o">.</span><span class="n">PrivateKey</span><span class="o">.</span><span class="n">generate</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_keypair</span> <span class="o">=</span> <span class="n">keypair</span>
+
+<div class="viewcode-block" id="Keypair.generate"><a class="viewcode-back" href="../../solana.html#solana.keypair.Keypair.generate">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">generate</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Keypair</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Generate a new random keypair.</span>
+
+<span class="sd">        This method exists to provide familiarity for web3.js users.</span>
+<span class="sd">        There isn&#39;t much reason to use it instead of just instantiating</span>
+<span class="sd">        ``Keypair()``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Keypair.from_secret_key"><a class="viewcode-back" href="../../solana.html#solana.keypair.Keypair.from_secret_key">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_secret_key</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">secret_key</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Keypair</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Create a keypair from the 64-byte secret key.</span>
+
+<span class="sd">        This method should only be used to recreate a keypair from a previously</span>
+<span class="sd">        generated secret key. Generating keypairs from a random seed should be done</span>
+<span class="sd">        with the ``.from_seed`` method.</span>
+
+<span class="sd">        :param secret_key: secret key in bytes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="n">secret_key</span><span class="p">[:</span><span class="mi">32</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Keypair.from_seed"><a class="viewcode-back" href="../../solana.html#solana.keypair.Keypair.from_seed">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_seed</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Keypair</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Generate a keypair from a 32 byte seed.</span>
+
+<span class="sd">        :param seed: 32-byte seed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">nacl</span><span class="o">.</span><span class="n">public</span><span class="o">.</span><span class="n">PrivateKey</span><span class="p">(</span><span class="n">seed</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="Keypair.sign"><a class="viewcode-back" href="../../solana.html#solana.keypair.Keypair.sign">[docs]</a>    <span class="k">def</span> <span class="nf">sign</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">signing</span><span class="o">.</span><span class="n">SignedMessage</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Sign a message with this keypair.</span>
+
+<span class="sd">        :param msg: message to sign.</span>
+<span class="sd">        :returns: A signed messeged object.</span>
+
+<span class="sd">        &gt;&gt;&gt; seed = bytes([1] * 32)</span>
+<span class="sd">        &gt;&gt;&gt; keypair = Keypair.from_seed(seed)</span>
+<span class="sd">        &gt;&gt;&gt; msg = b&quot;hello&quot;</span>
+<span class="sd">        &gt;&gt;&gt; signed_msg = keypair.sign(msg)</span>
+<span class="sd">        &gt;&gt;&gt; signed_msg.signature.hex()</span>
+<span class="sd">        &#39;e1430c6ebd0d53573b5c803452174f8991ef5955e0906a09e8fdc7310459e9c82a402526748c3431fe7f0e5faafbf7e703234789734063ee42be17af16438d08&#39;</span>
+<span class="sd">        &gt;&gt;&gt; signed_msg.message.decode(&#39;utf-8&#39;)</span>
+<span class="sd">        &#39;hello&#39;</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># pylint: disable=line-too-long</span>
+        <span class="k">return</span> <span class="n">signing</span><span class="o">.</span><span class="n">SigningKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span><span class="p">)</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">seed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;The 32-byte secret seed.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">bytes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_keypair</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">public_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">solana</span><span class="o">.</span><span class="n">publickey</span><span class="o">.</span><span class="n">PublicKey</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;The public key for this keypair.&quot;&quot;&quot;</span>
+        <span class="n">verify_key</span> <span class="o">=</span> <span class="n">signing</span><span class="o">.</span><span class="n">SigningKey</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span><span class="p">)</span><span class="o">.</span><span class="n">verify_key</span>
+        <span class="k">return</span> <span class="n">solana</span><span class="o">.</span><span class="n">publickey</span><span class="o">.</span><span class="n">PublicKey</span><span class="p">(</span><span class="n">verify_key</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">secret_key</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;The raw 64-byte secret key for this keypair.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">+</span> <span class="nb">bytes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">public_key</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Checks for equality by comparing public keys.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">secret_key</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">secret_key</span>
+
+    <span class="k">def</span> <span class="fm">__ne__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Implemented by negating __eq__.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span> <span class="o">==</span> <span class="n">other</span><span class="p">)</span>  <span class="c1"># pylint: disable=superfluous-parens</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, Michael Huang.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
